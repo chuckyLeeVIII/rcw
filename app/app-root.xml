@@ -1,0 +1,15 @@
+<Page xmlns="http://schemas.nativescript.org/tns.xsd" navigatingTo="onNavigatingTo">
+    <ActionBar title="PyWallet Mobile" />
+    
+    <TabView>
+        <TabViewItem title="Wallet">
+            <Frame defaultPage="wallet/wallet-page" />
+        </TabViewItem>
+        <TabViewItem title="Send">
+            <Frame defaultPage="send/send-page" />
+        </TabViewItem>
+        <TabViewItem title="History">
+            <Frame defaultPage="history/history-page" />
+        </TabViewItem>
+    </TabView>
+</Page>

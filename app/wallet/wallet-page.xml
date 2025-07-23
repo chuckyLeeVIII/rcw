@@ -1,0 +1,38 @@
+<Page xmlns="http://schemas.nativescript.org/tns.xsd" navigatingTo="onNavigatingTo">
+    <ScrollView>
+        <StackLayout class="p-4">
+            <Label text="Wallet Recovery" class="h2 text-center" />
+            
+            <!-- Basic Recovery -->
+            <Label text="Basic Recovery" class="h3 m-t-10" />
+            <TextView hint="Enter recovery phrase, private key, or WIF" text="{{ recoveryInput }}" class="input m-t-10" />
+            <Button text="Recover Wallet" tap="{{ onBasicRecover }}" class="btn btn-primary m-t-10" />
+            
+            <!-- Advanced Recovery -->
+            <Label text="Advanced Recovery" class="h3 m-t-20" />
+            <GridLayout rows="auto, auto, auto, auto" columns="*, *" class="m-t-10">
+                <TextField row="0" col="0" hint="Master Key" text="{{ masterKey }}" class="input m-r-5" />
+                <TextField row="0" col="1" hint="Salt" text="{{ salt }}" class="input m-l-5" />
+                <TextField row="1" col="0" hint="IV" text="{{ iv }}" class="input m-r-5 m-t-10" />
+                <TextField row="1" col="1" hint="Iterations" text="{{ iterations }}" keyboardType="number" class="input m-l-5 m-t-10" />
+                <TextField row="2" col="0" colspan="2" hint="Raw Input" text="{{ rawInput }}" class="input m-t-10" />
+                <Button row="3" col="0" colspan="2" text="Advanced Recovery" tap="{{ onAdvancedRecover }}" class="btn btn-secondary m-t-10" />
+            </GridLayout>
+            
+            <!-- Import Wallet File -->
+            <Label text="Import Wallet File" class="h3 m-t-20" />
+            <Button text="Choose Wallet File" tap="{{ onChooseFile }}" class="btn btn-outline m-t-10" />
+            <Label text="{{ selectedFile }}" textWrap="true" class="body m-t-5" />
+            
+            <!-- Results -->
+            <StackLayout visibility="{{ wallet ? 'visible' : 'collapsed' }}" class="m-t-20">
+                <Label text="Wallet Information" class="h3" />
+                <Label text="{{ 'Network: ' + wallet.network }}" class="body" />
+                <Label text="{{ 'Legacy Address: ' + wallet.legacyAddress }}" class="body" textWrap="true" />
+                <Label text="{{ 'SegWit Address: ' + wallet.segwitAddress }}" class="body" textWrap="true" />
+                <Label text="{{ 'Private Key: ' + wallet.privateKey }}" class="body" textWrap="true" />
+                <Label text="{{ 'Seed Phrase: ' + wallet.seedPhrase }}" class="body" textWrap="true" />
+            </StackLayout>
+        </StackLayout>
+    </ScrollView>
+</Page>
