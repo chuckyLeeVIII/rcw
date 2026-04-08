@@ -19,12 +19,9 @@ Follow these steps to set up and run the PyGUI Wallet on your local machine:
 
    Ensure you have Node.js installed (version 14 or higher). Download it from [nodejs.org](https://nodejs.org/).
 
-2. **Clone the repository**
+2. **Open the project folder**
 
-   ```
-   git clone https://github.com/yourusername/pygui-wallet.git
-   cd pygui-wallet
-   ```
+   Place or extract the project files on your machine, then open the project directory in your terminal.
 
 3. **Install dependencies**
 
