@@ -1,127 +1,273 @@
-# PyGUI Wallet
+# PyGUI Wallet - Multi-Chain Recovery Wallet
 
-PyGUI Wallet is a multi-cryptocurrency wallet with a dark, futuristic interface built using React, TypeScript, and Tailwind CSS.
+PyGUI Wallet is a comprehensive multi-cryptocurrency wallet with advanced recovery, cross-chain tracking, and master ledger capabilities. Built with React, TypeScript, and Tailwind CSS.
 
-## Features
+## 🚀 Features
 
-- Support for multiple cryptocurrencies (BTC, ETH, USDT, LTC, WBTC)
-- Wallet recovery using various key formats
-- Send transactions to multiple recipients
-- Transaction history
-- Dark mode interface
-- RBF (Replace-By-Fee) and CPFP (Child-Pays-For-Parent) support
+### Core Wallet
 
-## Installation Instructions
+- **Multi-Cryptocurrency Support**: BTC, BTC Testnet, LTC, DOGE, DASH, ETH, ETC, BCH
+- **Wallet Recovery**: Seed phrases (BIP39), private keys, WIF, wallet.dat files
+- **Multiple Derivation Paths**: BIP44, BIP49, BIP84, BIP86
+- **Send Transactions**: Multi-recipient support with RBF and CPFP
+- **Transaction History**: Complete tracking with confirmation status
 
-Follow these steps to set up and run the PyGUI Wallet on your local machine:
+### 🆕 Master Ledger System
 
-1. **Prerequisites**
+- **Central Tracking**: All wallets, keys, and addresses tracked in one master ledger
+- **Status Monitoring**: Active, empty, and dead key detection
+- **Cross-Chain Summary**: Aggregated view across all networks
+- **Recovery Score**: 0-100 score indicating recovery completeness
+- **Persistent Storage**: IndexedDB backup for all ledger data
 
-   Ensure you have Node.js installed (version 14 or higher). Download it from [nodejs.org](https://nodejs.org/).
+### 🆕 Unconfirmed & Unspent (UTXO) Tracking
 
-2. **Clone the repository**
+- **Confirmed/Unconfirmed Balances**: Separate tracking for both states
+- **UTXO Management**: Full UTXO tracking with transaction details
+- **Transaction State Monitoring**: Track pending, confirmed, and failed transactions
+- **Real-time Updates**: Balance checker refreshes all states
 
-   ```
-   git clone https://github.com/yourusername/pygui-wallet.git
-   cd pygui-wallet
-   ```
+### 🆕 Cross-Chain Calculations
 
-3. **Install dependencies**
+- **Cross-Chain Wallet Grouping**: Link addresses from same seed across multiple chains
+- **Aggregate Balance Views**: See total value across all networks
+- **Recovery Reports**: Detailed breakdown of recovery status per network
+- **Stale/Dead Address Detection**: Automatically identify unused addresses
+- **Smart Recommendations**: AI-generated suggestions for improving recovery
 
-   Run the following command to install all required dependencies:
+### 🆕 Ownership & Tax Management
 
-   ```
-   npm install
-   ```
+- **Ownership Tracking**: Assign owners to recovered wallets
+- **Ownership Verification**: Cryptographic proof of wallet control
+- **Tax Deposit Tracking**: Record tax payments with transaction hashes
+- **Developer Tax System**: Configurable tax rate on claimed wallets
 
-4. **Start the development server**
+### Recovery Pool
 
-   Run the following command to start the Vite development server:
+- **Multi-Source Recovery**: Scan seeds, keys, and wallet.dat files simultaneously
+- **IndexedDB Persistence**: All data saved locally for session recovery
+- **Pool Export/Import**: Full backup and restore capabilities
+- **Bulk Operations**: Delete, claim, and manage multiple wallets at once
 
-   ```
-   npm run dev
-   ```
+### Interface
 
-   This will start the application on `http://localhost:3000`.
+- **Dark Futuristic UI**: Modern, clean design with Tailwind CSS
+- **Responsive Layout**: Works on desktop and mobile
+- **Advanced Filtering**: Search, filter by network, tags, claimed status
+- **Sorting**: Sort by balance, network, date, amount
 
-5. **Build for production**
+## 📦 Installation
 
-   When you're ready to deploy the application, create a production build:
+### Prerequisites
 
-   ```
-   npm run build
-   ```
+- Node.js 16+ (recommended: Node.js 18+)
+- npm or yarn
 
-   This will generate optimized files in the `dist` directory.
+### Setup
 
-## Usage Tutorial
+```bash
+# Install dependencies
+npm install
 
-1. **Launching the Application**
-   - Open your web browser and navigate to `http://localhost:3000`.
-   - You'll see the dark, futuristic interface of the PyGUI Wallet.
+# Start development server
+npm run dev
 
-2. **Recovering a Wallet**
-   - In the "Recover Wallet" section, you'll see input fields for different key formats.
-   - Enter your recovery key in the appropriate field. Supported formats include:
-     - WIF (Wallet Import Format)
-     - Hex private key
-     - Mnemonic phrase
-     - Encrypted wallet file (.dat)
-   - Click the "Recover Wallet" button.
+# Build for production
+npm run build
 
-3. **Viewing Balances**
-   - Once your wallet is recovered, you'll see your balances for different cryptocurrencies (BTC, ETH, USDT, LTC, WBTC) in the top-right corner.
+# Preview production build
+npm run preview
 
-4. **Sending Coins**
-   - In the "Send Coins" section, you'll find fields for recipient address and amount.
-   - Enter the recipient's address and the amount you want to send.
-   - Select the coin type from the dropdown menu.
-   - Click "Add Transaction" to queue multiple transactions.
-   - You'll see a list of queued transactions below.
+# Lint code
+npm run lint
+```
 
-5. **Sending to Multiple Recipients**
-   - Repeat step 4 for each recipient you want to send to.
-   - Each new transaction will be added to the queue.
+The app will be available at `http://localhost:5173`
 
-6. **Sending All Queued Transactions**
-   - Once you've added all desired transactions, click the "Send All" button.
-   - Confirm the transaction in the popup dialog.
+## 📖 Usage Guide
 
-7. **Viewing Transaction History**
-   - Scroll down to see your transaction history.
-   - Each entry shows the recipient, amount, coin type, and timestamp.
+### 1. Recover Wallet from Seed
 
-8. **RBF (Replace-By-Fee) Transactions**
-   - For unconfirmed transactions that support RBF:
-     - Click on the transaction in the history.
-     - You'll see an option to increase the fee.
-     - Enter the new fee and click "Replace Transaction".
+1. Navigate to **Recovery Pool** page
+2. Enter your BIP39 mnemonic phrase
+3. Click **Recover from Seed**
+4. System will:
+   - Derive addresses across all supported networks
+   - Check balances on each address
+   - Track confirmed and unconfirmed balances
+   - Update master ledger automatically
 
-9. **CPFP (Child-Pays-For-Parent)**
-   - For unconfirmed transactions:
-     - Click on the transaction in the history.
-     - If CPFP is possible, you'll see an option to create a child transaction.
-     - Enter the amount for the child transaction (usually 2x the original fee).
-     - Click "Create CPFP Transaction".
+### 2. Recover from Private Key
 
-10. **Linking Wallets (Temporary Connection)**
-    - In the settings menu, you'll find an option to "Link Wallets".
-    - This allows you to temporarily connect multiple wallets for easier fund management during recovery.
+1. Enter private key (hex, WIF, or mnemonic format)
+2. Click **Recover from Private Key**
+3. System scans all networks for balances
 
-11. **Downloading Transaction Data**
-    - For any transaction, you can click a "Download Data" button.
-    - This will save the transaction details in a file, which can be useful for record-keeping or debugging.
+### 3. Recover from wallet.dat
 
-## Security Considerations
+1. Click **Recover from .dat File**
+2. Select your Bitcoin Core wallet.dat file
+3. System extracts and scans:
+   - WIF keys
+   - Hex private keys
+   - Mnemonic phrases
+   - Raw key data
 
-- Always keep your recovery key safe and never share it with anyone.
-- This wallet is for educational purposes only. For handling real cryptocurrencies, use well-established and audited wallet solutions.
-- The application doesn't store any private keys or sensitive information on the server. All operations are performed client-side.
+### 4. View Master Ledger
 
-## Contributing
+1. Navigate to **Master Ledger** section
+2. View:
+   - Total entries (wallets/addresses)
+   - Active keys with balances
+   - Empty keys (no balance, no activity)
+   - Dead keys (never had activity)
+   - Cross-chain summary
+   - Recovery score
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### 5. Clean Dead/Empty Keys
 
-## License
+```javascript
+// In RecoveryPoolContext
+cleanDeadEmptyKeys({
+  removeEmpty: true,    // Remove zero-balance addresses
+  removeDead: true,     // Remove never-used addresses
+  minBalance: 0         // Minimum balance threshold
+})
+```
 
-This project is open source and available under the [MIT License](LICENSE).
+### 6. Cross-Chain Analysis
+
+1. Click **Refresh Cross-Chain Calculations**
+2. View:
+   - Wallets grouped by seed fingerprint
+   - Total confirmed/unconfirmed per group
+   - Networks active for each seed
+   - UTXO aggregation
+   - Recovery recommendations
+
+### 7. Track Unconfirmed Balances
+
+All wallets now show:
+
+- `balance` - Confirmed balance
+- `unconfirmedBalance` - Pending transactions
+- `utxoCount` - Number of UTXOs
+- `lastChecked` - Last balance check timestamp
+
+### 8. Ownership & Tax
+
+```javascript
+// Set wallet owner
+setWalletOwner(walletId, 'owner-identifier')
+
+// Record tax deposit
+recordTaxDeposit(walletId, txHash, amount)
+
+// Verify ownership
+const isOwner = await verifyOwnership(walletId)
+```
+
+## 🔧 Architecture
+
+### Core Components
+
+```
+src/
+├── context/
+│   ├── RecoveryPoolContext.tsx    # Main recovery pool + master ledger
+│   ├── WalletContext.tsx          # Wallet state management
+│   ├── KeyManagementContext.tsx   # Key generation/import/export
+│   └── MarketplaceContext.tsx     # Marketplace features
+├── utils/
+│   ├── masterLedger.ts            # Master ledger implementation
+│   ├── crossChainCalculator.ts    # Cross-chain calculations
+│   ├── balanceChecker.ts          # Multi-network balance checking
+│   ├── recoveryEngine.ts          # Seed/key derivation engine
+│   ├── electrumx.ts               # ElectrumX WebSocket client
+│   └── datFileParser.ts           # wallet.dat file parser
+├── types/
+│   ├── recoveryPool.ts            # Core type definitions
+│   ├── keyManagement.ts           # Key management types
+│   └── nft.ts                     # NFT types
+└── pages/
+    ├── RecoveryPoolPage.tsx       # Main recovery interface
+    ├── WalletPage.tsx             # Wallet overview
+    ├── SendPage.tsx               # Send transactions
+    ├── HistoryPage.tsx            # Transaction history
+    └── KeyManagementPage.tsx      # Key management
+```
+
+### Master Ledger Flow
+
+```
+Recovery Source (Seed/Key/.dat)
+        ↓
+Recovery Engine (Derive Addresses)
+        ↓
+Balance Checker (Check Confirmed + Unconfirmed)
+        ↓
+Master Ledger (Track All State)
+        ↓
+Cross-Chain Calculator (Group & Analyze)
+        ↓
+UI Display (Ledger + Reports)
+```
+
+## 🔐 Security
+
+- **Client-Side Only**: All operations happen in browser
+- **No Server Storage**: Private keys never leave your device
+- **IndexedDB Persistence**: Encrypted local storage
+- **Seed Encryption**: Pool seed can be encrypted with passphrase
+- **Educational Purpose**: Use audited solutions for production funds
+
+## 🌐 Supported Networks
+
+| Network | Symbol | Type | Derivation |
+|---------|--------|------|------------|
+| Bitcoin | BTC | UTXO | BIP44/49/84/86 |
+| Bitcoin Testnet | tBTC | UTXO | BIP44/49/84/86 |
+| Litecoin | LTC | UTXO | BIP44/49/84 |
+| Dogecoin | DOGE | UTXO | BIP44 |
+| Dash | DASH | UTXO | BIP44 |
+| Ethereum | ETH | Account | BIP44 |
+| Ethereum Classic | ETC | Account | BIP44 |
+| Bitcoin Cash | BCH | UTXO | BIP44 |
+
+## 📊 API Endpoints
+
+Balance checking uses rotating APIs for reliability:
+
+- **BTC**: Blockstream, Mempool.space, BlockCypher
+- **ETH**: Etherscan, Cloudflare ETH RPC, Ankr
+- **LTC/DOGE/DASH**: BlockCypher, Blockchair
+- **ElectrumX**: Direct Bitcoin node access via WebSocket
+
+## 🛠️ Development
+
+### Adding New Networks
+
+1. Update `SUPPORTED_NETWORKS` in `src/types/recoveryPool.ts`
+2. Add network config in `src/utils/crossChainCalculator.ts`
+3. Add balance endpoints in `src/utils/balanceChecker.ts`
+
+### Extending Master Ledger
+
+The master ledger in `src/utils/masterLedger.ts` provides:
+
+- `updateMasterLedger()` - Refresh from current state
+- `cleanDeadEmptyKeys()` - Remove unused addresses
+- `generateRecoveryReport()` - Full analysis report
+- `calculateCrossChainTotals()` - Aggregate balances
+
+## 📝 License
+
+MIT License - See LICENSE file
+
+## 🤝 Contributing
+
+Pull requests welcome. Please ensure all TypeScript checks pass before submitting.
+
+## ⚠️ Disclaimer
+
+This software is provided as-is for educational and recovery purposes. Always verify transactions and balances independently before making any financial decisions. The developers are not responsible for any loss of funds.
