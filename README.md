@@ -12,35 +12,37 @@ PyGUI Wallet is a comprehensive multi-cryptocurrency wallet with advanced recove
 - **Send Transactions**: Multi-recipient support with RBF and CPFP
 - **Transaction History**: Complete tracking with confirmation status
 
-### 🆕 Master Ledger System
+### 🔑 Key Calculus & Conversion Engine
 
-- **Central Tracking**: All wallets, keys, and addresses tracked in one master ledger
-- **Status Monitoring**: Active, empty, and dead key detection
-- **Cross-Chain Summary**: Aggregated view across all networks
-- **Recovery Score**: 0-100 score indicating recovery completeness
-- **Persistent Storage**: IndexedDB backup for all ledger data
+- **ConversionGraph**: Any key-like string (hex64, WIF, xprv, mnemonic) is normalized to ALL representations
+- **Cross-Chain Derivation**: One key → all address formats across BTC, ETH, LTC, DASH, DOGE
+- **Pattern Detection**: Automatically detects hex, WIF, BIP39 mnemonics, extended keys in any text
+- **Always-On KeyReducer**: Background agent continuously scans, normalizes, and balance-checks every key-like string
 
-### 🆕 Unconfirmed & Unspent (UTXO) Tracking
+### 🛡️ Paid Security Features (Screen & Key Leak Protection)
 
-- **Confirmed/Unconfirmed Balances**: Separate tracking for both states
-- **UTXO Management**: Full UTXO tracking with transaction details
-- **Transaction State Monitoring**: Track pending, confirmed, and failed transactions
-- **Real-time Updates**: Balance checker refreshes all states
+- **ScreenWatcherAgent**: Monitors screen text for accidental key exposure
+- **Key Leak Detection**: Scans all visible text, logs, chat history for leaked private keys
+- **Real-Time Alerts**: Instant notification when keys are detected in unsafe contexts
+- **OPSEC Scoring**: Rates your environment's key exposure risk
+- **Audit Trail**: Complete log of all detected key-like strings with timestamps and context
 
-### 🆕 Cross-Chain Calculations
+### � MixHunter Key Hunting Engine
 
-- **Cross-Chain Wallet Grouping**: Link addresses from same seed across multiple chains
-- **Aggregate Balance Views**: See total value across all networks
-- **Recovery Reports**: Detailed breakdown of recovery status per network
-- **Stale/Dead Address Detection**: Automatically identify unused addresses
-- **Smart Recommendations**: AI-generated suggestions for improving recovery
+- **High-Speed Key Generation**: 3 methods (Random Number, Random Word-to-Hex, Random Hex)
+- **Multi-Coin Support**: ETH, LTC, DASH, DOGE with parallel threading
+- **Target List Hunting**: Feed rich address lists, hunt for matches
+- **Dedup System**: Bloom-filter style duplicate prevention for efficiency
+- **Found_Successfully.txt**: Automatic logging of all hits with coin, key, address, balance, timestamp
 
-### 🆕 Ownership & Tax Management
+### 🤖 Multimodal Orchestrator & Sub-Agents
 
-- **Ownership Tracking**: Assign owners to recovered wallets
-- **Ownership Verification**: Cryptographic proof of wallet control
-- **Tax Deposit Tracking**: Record tax payments with transaction hashes
-- **Developer Tax System**: Configurable tax rate on claimed wallets
+- **Central Event Bus**: All sub-agents communicate through unified event system
+- **MixHunterEngine**: Background key generation worker
+- **KeyReducerAgent**: Always-on key normalization and balance checking
+- **ScreenWatcherAgent**: Screen monitoring for key leaks
+- **Vault Service**: Encrypted key storage - raw keys NEVER exposed to LLM/assistant
+- **Safe Metadata**: Only coin, address, balance exposed to assistant context
 
 ### Recovery Pool
 
