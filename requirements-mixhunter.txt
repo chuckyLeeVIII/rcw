@@ -1,0 +1,5 @@
+# MixHunter / Guardian Dependencies
+eth-account>=0.9.0
+eth-keys>=0.4.0
+base58>=2.1.1
+bip-utils>=2.7.0
