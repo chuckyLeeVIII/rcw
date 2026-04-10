@@ -1,5 +1,5 @@
 {
-  "name": "pywallet-web",
+  "name": "pygui-wallet",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -11,19 +11,15 @@
   },
   "dependencies": {
     "@bitcoinerlab/secp256k1": "^1.0.2",
-    "@scure/bip32": "^1.3.3",
-    "@wagmi/core": "^1.4.12",
-    "@web3modal/wagmi": "^3.5.5",
-    "assert": "^2.1.0",
-    "axios": "^1.6.7",
+    "axios": "^0.27.2",
     "bip39": "^3.1.0",
-    "bitcoinjs-lib": "^6.1.5",
+    "bitcoinjs-lib": "^6.1.7",
     "bs58check": "^2.1.2",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.0",
     "ethers": "^5.7.2",
     "https-browserify": "^1.0.0",
-    "lucide-react": "^0.344.1",
+    "lucide-react": "^0.344.0",
     "os-browserify": "^0.3.0",
     "process": "^0.11.10",
     "react": "^18.2.0",
@@ -31,18 +27,15 @@
     "react-router-dom": "^6.22.1",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
-    "tiny-secp256k1": "^2.2.3",
-    "url": "^0.11.3",
-    "viem": "^1.21.4",
-    "wagmi": "^1.4.13"
+    "url": "^0.11.4"
   },
   "devDependencies": {
-    "@types/node": "^20.11.25",
+    "@rollup/plugin-inject": "^5.0.5",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "@vitejs/plugin-react": "^4.2.1",
+    "@vitejs/plugin-react": "^4.0.3",
     "autoprefixer": "^10.4.14",
     "eslint": "^8.45.0",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -50,7 +43,6 @@
     "postcss": "^8.4.27",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.0.2",
-    "vite": "^5.1.5",
-    "vite-plugin-wasm": "^3.3.0"
+    "vite": "^4.4.5"
   }
 }

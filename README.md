@@ -54,7 +54,7 @@ Follow these steps to set up and run the PyGUI Wallet on your local machine:
 ## Usage Tutorial
 
 1. **Launching the Application**
-   - Open your web browser and navigate to `http://localhost:3000`.
+   - Open your web browser and navigate to `http://localhost:5173`.
    - You'll see the dark, futuristic interface of the PyGUI Wallet.
 
 2. **Recovering a Wallet**
