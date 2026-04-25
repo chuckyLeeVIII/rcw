@@ -22,6 +22,7 @@ import {
   Network,
 } from 'lucide-react';
 import { SUPPORTED_NETWORKS } from '../types/recoveryPool';
+import { RecoveryAIAssistant } from '../components/RecoveryAIAssistant';
 
 export function RecoveryPoolPage() {
   const recoveryPool = useRecoveryPool();
@@ -204,6 +205,8 @@ export function RecoveryPoolPage() {
           <span className="text-sm text-red-400">{error}</span>
         </div>
       )}
+
+      <RecoveryAIAssistant />
 
       {/* Recovery forms */}
       {activeTab === 'seed' && (

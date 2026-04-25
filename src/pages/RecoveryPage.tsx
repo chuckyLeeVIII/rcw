@@ -34,6 +34,11 @@ const features = [
     title: 'Brute Force Recovery',
     description: 'Recover partially known keys with configurable character sets.',
   },
+  {
+    icon: <Cpu className="w-6 h-6" />,
+    title: 'AI Proof Assistant',
+    description: 'Attach proof-of-ownership evidence and receive guided recovery actions.',
+  },
 ];
 
 export function RecoveryPage() {

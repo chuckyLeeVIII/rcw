@@ -247,6 +247,7 @@ interface RecoveryPoolContextValue extends RecoveryPoolState {
 
   // NEW: Ownership and tax
   setWalletOwner: (id: string, owner: string) => void;
+  setOwnershipProof: (id: string, proof: string) => void;
   recordTaxDeposit: (id: string, txHash: string, amount: number) => void;
   verifyOwnership: (id: string) => Promise<boolean>;
 
@@ -693,6 +694,15 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }));
   }, []);
 
+  const setOwnershipProof = useCallback((id: string, proof: string) => {
+    setState(prev => ({
+      ...prev,
+      discoveredWallets: prev.discoveredWallets.map(w =>
+        w.id === id ? { ...w, ownershipProof: proof } : w
+      ),
+    }));
+  }, []);
+
   const recordTaxDeposit = useCallback((id: string, txHash: string, amount: number) => {
     setState(prev => ({
       ...prev,
@@ -1098,6 +1108,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // NEW: Ownership and tax
     setWalletOwner,
+    setOwnershipProof,
     recordTaxDeposit,
     verifyOwnership,
 

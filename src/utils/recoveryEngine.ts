@@ -28,6 +28,21 @@ function getDerivationPath(purpose: number, coinType: number, account: number, c
   return `m/${purpose}'/${coinType}'/${account}'/${change}/${index}`;
 }
 
+export function getAllDerivationPathTemplates(coinType: number): string[] {
+  const templates: string[] = [];
+  const purposes = [BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE, BIP86_PURPOSE];
+  for (const purpose of purposes) {
+    for (let account = 0; account < DEFAULT_ACCOUNTS; account++) {
+      for (let change = 0; change < 2; change++) {
+        for (let index = 0; index < DEFAULT_SCAN_DEPTH; index++) {
+          templates.push(getDerivationPath(purpose, coinType, account, change, index));
+        }
+      }
+    }
+  }
+  return templates;
+}
+
 // Get network for a given network id
 function getNetwork(networkId: string): bitcoin.networks.Network | undefined {
   return NETWORK_CONFIGS[networkId] || bitcoin.networks.bitcoin;
@@ -39,7 +54,7 @@ function getDerivationType(purpose: number): DiscoveredWallet['derivationType'] 
     case BIP44_PURPOSE: return 'BIP44';
     case BIP49_PURPOSE: return 'BIP49';
     case BIP84_PURPOSE: return 'BIP84';
-    case BIP86_PURPOSE: return 'BIP84';
+    case BIP86_PURPOSE: return 'BIP86';
     default: return 'BIP44';
   }
 }
@@ -61,10 +76,24 @@ async function deriveAddressFromSeed(
     const root = bitcoin.bip32.fromSeed(Buffer.from(seed, 'hex'), network);
     const path = getDerivationPath(purpose, coinType, account, change, index);
     const child = root.derivePath(path);
-    const { address, pubkey } = bitcoin.payments.p2wpkh({
-      pubkey: child.publicKey,
-      network,
-    });
+    let address: string | undefined;
+    let pubkey: Buffer | undefined;
+
+    if (purpose === BIP49_PURPOSE) {
+      const payment = bitcoin.payments.p2sh({
+        redeem: bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network }),
+        network,
+      });
+      address = payment.address;
+      pubkey = child.publicKey;
+    } else {
+      const payment = bitcoin.payments.p2wpkh({
+        pubkey: child.publicKey,
+        network,
+      });
+      address = payment.address;
+      pubkey = payment.pubkey;
+    }
 
     if (!address || !pubkey) return null;
 
@@ -125,7 +154,7 @@ export async function scanSeedPhrase(
   const seed = bip39.mnemonicToSeedSync(mnemonic, passphrase);
   const seedHex = seed.toString('hex');
 
-  const purposes = [BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE];
+  const purposes = [BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE, BIP86_PURPOSE];
   let totalSteps = purposes.length * SUPPORTED_NETWORKS.length * DEFAULT_ACCOUNTS * DEFAULT_SCAN_DEPTH;
   let currentStep = 0;
 
@@ -133,7 +162,7 @@ export async function scanSeedPhrase(
     for (const network of SUPPORTED_NETWORKS) {
       // Skip networks that don't support certain purposes
       if (purpose === BIP49_PURPOSE && ['ethereum', 'ethereum-classic'].includes(network.id)) continue;
-      if (purpose === BIP84_PURPOSE && ['ethereum', 'ethereum-classic', 'dogecoin'].includes(network.id)) continue;
+      if ((purpose === BIP84_PURPOSE || purpose === BIP86_PURPOSE) && ['ethereum', 'ethereum-classic', 'dogecoin'].includes(network.id)) continue;
 
       for (let account = 0; account < DEFAULT_ACCOUNTS; account++) {
         for (let change = 0; change < 2; change++) {
@@ -161,6 +190,8 @@ export async function scanSeedPhrase(
                   result = await deriveAddressFromSeed(seedHex, network.id, purpose, network.coinType, account, change, index);
                 } else if (purpose === BIP84_PURPOSE) {
                   result = await deriveAddressFromSeed(seedHex, network.id, purpose, network.coinType, account, change, index);
+                } else if (purpose === BIP86_PURPOSE) {
+                  result = await deriveAddressFromSeed(seedHex, network.id, purpose, network.coinType, account, change, index);
                 }
               }
             } catch {
@@ -182,6 +213,12 @@ export async function scanSeedPhrase(
                 derivationType: getDerivationType(purpose),
                 accountIndex: account,
                 addressIndex: index,
+                unconfirmedBalance: 0,
+                unconfirmedBalanceFormatted: '0',
+                utxos: [],
+                utxoCount: 0,
+                transactions: [],
+                lastChecked: Date.now(),
               };
               wallets.push(wallet);
               onProgress?.((currentStep / totalSteps) * 100, wallet);
@@ -230,6 +267,12 @@ export async function scanPrivateKey(
           derivationType: 'unknown',
           accountIndex: 0,
           addressIndex: 0,
+          unconfirmedBalance: 0,
+          unconfirmedBalanceFormatted: '0',
+          utxos: [],
+          utxoCount: 0,
+          transactions: [],
+          lastChecked: Date.now(),
         });
       } else {
         // UTXO-based chains
@@ -257,6 +300,12 @@ export async function scanPrivateKey(
                 derivationType: 'BIP84',
                 accountIndex: 0,
                 addressIndex: idx,
+                unconfirmedBalance: 0,
+                unconfirmedBalanceFormatted: '0',
+                utxos: [],
+                utxoCount: 0,
+                transactions: [],
+                lastChecked: Date.now(),
               });
             }
 
@@ -280,6 +329,12 @@ export async function scanPrivateKey(
                 derivationType: 'legacy',
                 accountIndex: 0,
                 addressIndex: idx,
+                unconfirmedBalance: 0,
+                unconfirmedBalanceFormatted: '0',
+                utxos: [],
+                utxoCount: 0,
+                transactions: [],
+                lastChecked: Date.now(),
               });
             }
           } catch {
@@ -305,6 +360,12 @@ export async function scanPrivateKey(
                 derivationType: 'BIP84',
                 accountIndex: 0,
                 addressIndex: idx,
+                unconfirmedBalance: 0,
+                unconfirmedBalanceFormatted: '0',
+                utxos: [],
+                utxoCount: 0,
+                transactions: [],
+                lastChecked: Date.now(),
               });
             }
           }
