@@ -539,7 +539,6 @@ export function SendPage() {
       setIsSending(false);
     }
   }, [
-    window.ethereum,
     address,
     amount,
     to,

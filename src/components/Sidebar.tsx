@@ -13,7 +13,8 @@ import {
   Shield,
   Activity,
   Layers,
-  ShoppingBag
+  ShoppingBag,
+  Calculator,
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -25,6 +26,7 @@ const mainNavItems = [
   { to: '/pool', icon: Layers, label: 'Recovery Pool' },
   { to: '/marketplace', icon: ShoppingBag, label: 'NFT Market' },
   { to: '/keys', icon: Shield, label: 'Keys & Contracts' },
+  { to: '/calculator', icon: Calculator, label: 'Key Calculator' },
 ];
 
 const bottomNavItems = [
