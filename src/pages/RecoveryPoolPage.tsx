@@ -20,8 +20,11 @@ import {
   EyeOff,
   PlusCircle,
   Network,
+  Send,
 } from 'lucide-react';
 import { SUPPORTED_NETWORKS } from '../types/recoveryPool';
+import { RecoveryAIAssistant } from '../components/RecoveryAIAssistant';
+import { withdrawNativeToAddress } from '../utils/withdrawal';
 
 export function RecoveryPoolPage() {
   const recoveryPool = useRecoveryPool();
@@ -37,6 +40,14 @@ export function RecoveryPoolPage() {
   const [filterNetwork, setFilterNetwork] = useState<string>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [withdrawTo, setWithdrawTo] = useState('');
+  const [withdrawingWalletId, setWithdrawingWalletId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (walletCtx.address) {
+      setWithdrawTo(walletCtx.address);
+    }
+  }, [walletCtx.address]);
 
   const handleSeedRecovery = async () => {
     setError(null);
@@ -98,6 +109,36 @@ export function RecoveryPoolPage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const handleWithdraw = async (walletId: string) => {
+    const target = withdrawTo.trim() || walletCtx.address || '';
+    if (!target) {
+      setError('Set a destination address for withdrawals.');
+      return;
+    }
+
+    const wallet = recoveryPool.discoveredWallets.find((w) => w.id === walletId);
+    if (!wallet?.privateKey) {
+      setError('This wallet has no private key available for withdrawal.');
+      return;
+    }
+
+    setError(null);
+    setWithdrawingWalletId(walletId);
+    try {
+      const result = await withdrawNativeToAddress({
+        privateKey: wallet.privateKey,
+        toAddress: target,
+      });
+      setError(null);
+      await recoveryPool.refreshBalances();
+      alert(`Withdrawal completed: ${result.sentAmount} sent to ${result.destinationAddress}\\nTX: ${result.txHash}`);
+    } catch (err: any) {
+      setError(err?.message || 'Withdrawal failed');
+    } finally {
+      setWithdrawingWalletId(null);
+    }
   };
 
   const filteredWallets = recoveryPool.discoveredWallets.filter(w => {
@@ -204,6 +245,18 @@ export function RecoveryPoolPage() {
           <span className="text-sm text-red-400">{error}</span>
         </div>
       )}
+
+      <div className="card-glass rounded-xl p-4 border border-cyan-500/20">
+        <label className="block text-xs text-gray-400 mb-2">Withdrawal Destination (default: connected wallet)</label>
+        <input
+          value={withdrawTo}
+          onChange={(e) => setWithdrawTo(e.target.value)}
+          placeholder="0x..."
+          className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm text-white"
+        />
+      </div>
+
+      <RecoveryAIAssistant />
 
       {/* Recovery forms */}
       {activeTab === 'seed' && (
@@ -522,12 +575,37 @@ export function RecoveryPoolPage() {
                             Copy Address
                           </button>
                           <button
-                            onClick={() => recoveryPool.removeWallet(wallet.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              recoveryPool.removeWallet(wallet.id);
+                            }}
                             className="btn-neon text-xs px-3 py-1.5 rounded-lg border-red-500/30 hover:border-red-500/60 text-red-400"
                           >
                             <Trash2 className="w-3 h-3 mr-1" />
                             Remove
                           </button>
+                          {wallet.privateKey && wallet.network.toLowerCase().includes('ethereum') && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleWithdraw(wallet.id);
+                              }}
+                              disabled={withdrawingWalletId === wallet.id}
+                              className="btn-neon text-xs px-3 py-1.5 rounded-lg border-cyan-500/30 hover:border-cyan-500/60 disabled:opacity-50"
+                            >
+                              {withdrawingWalletId === wallet.id ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  Withdrawing...
+                                </>
+                              ) : (
+                                <>
+                                  <Send className="w-3 h-3 mr-1" />
+                                  Withdraw
+                                </>
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

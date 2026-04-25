@@ -44,7 +44,7 @@ export interface DiscoveredWallet {
   // Existing fields
   symbol: string;
   source: 'seed' | 'privateKey' | 'datFile' | 'wif' | 'encrypted';
-  derivationType: 'BIP44' | 'BIP49' | 'BIP84' | 'legacy' | 'unknown';
+  derivationType: 'BIP44' | 'BIP49' | 'BIP84' | 'BIP86' | 'legacy' | 'unknown';
   accountIndex: number;
   addressIndex: number;
   // NEW: Cross-chain linkage
