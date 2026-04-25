@@ -13,7 +13,6 @@ import { RecoveryPage } from './pages/RecoveryPage';
 import { RecoveryPoolPage } from './pages/RecoveryPoolPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { KeyManagementPage } from './pages/KeyManagementPage';
-import { UniversalCalculatorPage } from './pages/UniversalCalculatorPage';
 
 function App() {
   return (
@@ -32,7 +31,6 @@ function App() {
                   <Route path="pool" element={<RecoveryPoolPage />} />
                   <Route path="marketplace" element={<MarketplacePage />} />
                   <Route path="keys" element={<KeyManagementPage />} />
-                  <Route path="calculator" element={<UniversalCalculatorPage />} />
                 </Route>
               </Routes>
             </BrowserRouter>
