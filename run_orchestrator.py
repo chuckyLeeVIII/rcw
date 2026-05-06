@@ -3,19 +3,19 @@
 PyGUI Wallet - Multimodal Orchestrator Entry Point
 
 Runs all sub-agents:
-- MixHunterEngine: High-speed key generation
 - KeyReducerAgent: Continuous key normalization
-- ScreenWatcherAgent: Screen monitoring
+- ComputerScannerAgent: Non-destructive filesystem scan with BTCRecover filters
 
 Usage:
     python run_orchestrator.py --config config.yaml
-    python run_orchestrator.py --coin eth --threads 16 --min-balance 2000
+    python run_orchestrator.py --scan --scan-paths /home/user --scan-workers 4
 """
 
 import argparse
 import sys
 import time
 import signal
+import threading
 from pathlib import Path
 
 from multimodal_orchestrator import MultimodalOrchestrator
@@ -23,22 +23,22 @@ from vault.service import Vault
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='PyGUI Wallet - Multimodal Key Hunter')
-    
-    # MixHunter args
-    parser.add_argument('--coin', nargs='+', default=['eth'],
-                       help='Coins to hunt (eth, ltc, dash, doge)')
-    parser.add_argument('--method', choices=['random_number', 'random_words', 'random_hex'],
-                       default='random_hex', help='Key generation method')
-    parser.add_argument('--threads', type=int, default=8, help='Number of hunter threads')
-    parser.add_argument('--min-balance', type=float, default=2000.0,
-                       help='Minimum USD balance to report')
-    parser.add_argument('--targets', type=str, help='Path to targets.txt file')
-    parser.add_argument('--output', type=str, default='Found_Successfully.txt',
-                       help='Output file for found keys')
+    parser = argparse.ArgumentParser(description='PyGUI Wallet - Multimodal Recovery')
     
     # KeyReducer args
     parser.add_argument('--watch-files', nargs='+', help='Files to watch for keys')
+    
+    # ComputerScanner args
+    parser.add_argument('--scan', action='store_true', help='Start computer scanner on startup')
+    parser.add_argument('--scan-paths', nargs='+', help='Paths to scan (default: home dir)')
+    parser.add_argument('--richlist', type=str, help='Path to richlist.txt for address matching')
+    parser.add_argument('--scan-workers', type=int, default=4, help='Scanner worker threads')
+    parser.add_argument('--tokenlist', type=str, help='Path to btcrecover-style tokenlist for password recovery')
+    
+    # API Server args
+    parser.add_argument('--api', action='store_true', help='Run FastAPI server')
+    parser.add_argument('--api-port', type=int, default=8000, help='API server port')
+    parser.add_argument('--api-host', type=str, default='127.0.0.1', help='API server host')
     
     # General args
     parser.add_argument('--vault-path', default='vault.json', help='Vault storage path')
@@ -50,18 +50,14 @@ def parse_args():
 def build_config(args) -> dict:
     """Build config from CLI args"""
     return {
-        'mixhunter': {
-            'targets_file': args.targets,
-            'coins': args.coin,
-            'method': args.method,
-            'threads': args.threads,
-            'dedup': True,
-            'min_balance_usd': args.min_balance,
-            'output_file': args.output,
-        },
         'key_reducer': {
-            'min_balance_usd': args.min_balance,
             'watch_files': args.watch_files or [],
+        },
+        'computer_scanner': {
+            'scan_paths': args.scan_paths or [str(Path.home())],
+            'min_balance_usd': 0.0,
+            'richlist_path': args.richlist,
+            'tokenlist_path': args.tokenlist,
         },
         'balance_checkers': {},  # TODO: Add balance checkers
     }
@@ -87,13 +83,13 @@ def main():
     # Register event handlers
     def on_key_found(event):
         print(f"\n{'='*60}")
-        print(f"KEY FOUND!")
+        print(f"ARTIFACT FOUND!")
         print(f"Source: {event.source}")
         print(f"Data: {event.data}")
         print(f"{'='*60}\n")
     
-    orchestrator.on_event('key_hunt:found', on_key_found)
     orchestrator.on_event('key_reducer:found', on_key_found)
+    orchestrator.on_event('computer_scan:found', on_key_found)
     
     # Handle graceful shutdown
     def signal_handler(sig, frame):
@@ -106,13 +102,29 @@ def main():
     
     # Start
     print(f"[Main] Starting PyGUI Wallet Orchestrator")
-    print(f"[Main] Coins: {', '.join(args.coin)}")
-    print(f"[Main] Method: {args.method}")
-    print(f"[Main] Threads: {args.threads}")
-    print(f"[Main] Min Balance: ${args.min_balance}")
     print()
     
     orchestrator.start()
+    
+    # Optionally start computer scanner immediately
+    if args.scan and orchestrator.computer_scanner:
+        orchestrator.computer_scanner.start(num_workers=args.scan_workers)
+    
+    # Optionally run API server
+    if args.api:
+        import uvicorn
+        from api_server import app
+        
+        # Inject orchestrator into API server module
+        import api_server
+        api_server.orchestrator = orchestrator
+        
+        print(f"[Main] Starting API server on {args.api_host}:{args.api_port}")
+        api_thread = threading.Thread(
+            target=lambda: uvicorn.run(app, host=args.api_host, port=args.api_port, log_level="warning"),
+            daemon=True,
+        )
+        api_thread.start()
     
     # Status loop
     try:
@@ -120,12 +132,12 @@ def main():
             time.sleep(10)
             status = orchestrator.get_status()
             
-            mh = status.get('mixhunter', {})
+            cs = status.get('computer_scanner', {})
             print(
-                f"\r[Status] Keys: {mh.get('keys_generated', 0):,} | "
-                f"Rate: {mh.get('keys_per_second', 0):.0f}/s | "
-                f"Found: {mh.get('hits_found', 0)} | "
-                f"Value: ${mh.get('total_balance_usd', 0):.2f}",
+                f"\r[Status] Scan Files: {cs.get('files_scanned', 0):,} | "
+                f"Artifacts: {cs.get('artifacts_found', 0)} | "
+                f"Keys: {cs.get('keys_extracted', 0)} | "
+                f"Richlist: {cs.get('richlist_hits', 0)}",
                 end='',
                 flush=True,
             )

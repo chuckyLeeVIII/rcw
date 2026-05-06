@@ -194,6 +194,10 @@ class ElectrumXClient {
     return this.request('blockchain.headers.subscribe', []);
   }
 
+  async broadcastTransaction(rawHex: string): Promise<string> {
+    return this.request('blockchain.transaction.broadcast', [rawHex]);
+  }
+
   disconnect() {
     if (this.ws) {
       this.ws.close();
@@ -308,4 +312,9 @@ export async function getBTCUTXOs(address: string, network: string = 'bitcoin'):
   } catch {
     return [];
   }
+}
+
+export async function broadcastBTCTransaction(rawHex: string): Promise<string> {
+  const client = await electrumPool.getConnection();
+  return client.broadcastTransaction(rawHex);
 }

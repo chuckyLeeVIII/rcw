@@ -212,8 +212,9 @@ export function WalletPage() {
           {cryptoList.map((crypto) => {
             const networkId = symbolToNetworkId[crypto.symbol] || 'eth-mainnet';
             const bal = getBalanceForNetwork(networkId);
-            const balanceValue = bal ? bal.confirmed.toFixed(8) : '0.00000000';
-            const source = bal?.source || 'pending';
+            const isFetched = NETWORKS.some(n => n.id === networkId);
+            const balanceValue = bal ? bal.confirmed.toFixed(8) : isFetched ? '0.00000000' : '--';
+            const source = bal?.source || (isFetched ? 'pending' : 'unsupported');
 
             return (
               <div

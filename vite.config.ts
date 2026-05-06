@@ -79,6 +79,13 @@ export default defineConfig({
   },
   build: {
     target: 'es2020',
-    commonjsOptions: { transformMixedEsModules: true }
-  }
+    commonjsOptions: { transformMixedEsModules: true },
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  },
+  base: './'
 });

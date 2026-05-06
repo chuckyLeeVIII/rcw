@@ -12,8 +12,51 @@ import threading
 import queue
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Iterator
+from .btc_recover import btc_from_hex, btc_from_wif
 from pathlib import Path
 from datetime import datetime, timezone
+
+# Multi-chain support via blockthon
+try:
+    import sys
+    sys.path.insert(0, '/run/media/chucky/onn. Disk/v4.3.6')
+    # Try importing blockthon Utils directly
+    from blockthon.Utils import (
+        PrivateKey_To_Addr as btc_addr,  # BTC address
+        PrivateKey_To_Compress_Addr,     # BTC compressed
+        PrivateKey_To_UnCompress_Addr,   # BTC uncompressed
+    )
+    from blockthon.Ethereum import PrivateKey_To_ETH as eth_addr
+    from blockthon.Litecoin import PrivateKey_To_LTC as ltc_addr
+    from blockthon.Dogecoin import PrivateKey_To_DOGE as doge_addr
+    from blockthon.Dash import PrivateKey_To_DASH as dash_addr
+    from blockthon.DigiByte import PrivateKey_To_DGB as dgb_addr
+    from blockthon.BitcoinGold import PrivateKey_To_BTG as btg_addr
+    from blockthon.Qtum import PrivateKey_To_QTUM as qtum_addr
+    from blockthon.Ravencoin import PrivateKey_To_RVN as rvn_addr
+    from blockthon.Tron import PrivateKey_To_TRX as trx_addr
+    from blockthon.zCash import PrivateKey_To_ZEC as zec_addr
+    BLOCKTHON_AVAILABLE = True
+except Exception as e:
+    print(f'[KeyReducer] Blockthon not fully available: {e}')
+    BLOCKTHON_AVAILABLE = False
+    # Fallback functions
+    btc_addr = eth_addr = ltc_addr = doge_addr = None
+    dash_addr = dgb_addr = btg_addr = qtum_addr = None
+    rvn_addr = trx_addr = zec_addr = None
+
+# Blockcypher / atomicwallet API balance checkers
+BALANCE_APIS = {
+    'btc': 'https://bitcoin.atomicwallet.io/api/v2/address/{addr}',
+    'ltc': 'https://litecoin.atomicwallet.io/api/v2/address/{addr}',
+    'doge': 'https://dogecoin.atomicwallet.io/api/v2/address/{addr}',
+    'dash': 'https://dash.atomicwallet.io/api/v2/address/{addr}',
+    'dgb': 'https://digibyte.atomicwallet.io/api/v1/address/{addr}',
+    'btg': 'https://bgold.atomicwallet.io/api/v1/address/{addr}',
+    'rvn': 'https://ravencoin.atomicwallet.io/api/v1/address/{addr}',
+    'qtum': 'https://qtum.atomicwallet.io/api/v1/address/{addr}',
+    'zec': 'https://zcash.atomicwallet.io/api/v1/address/{addr}',
+}
 
 
 @dataclass
@@ -116,40 +159,108 @@ class KeyReducerAgent:
             return None
     
     def _from_hex(self, hex_key: str) -> Optional[dict]:
-        """Convert hex private key to all forms"""
+        """Convert hex private key to all forms across ALL chains"""
         try:
             privkey = bytes.fromhex(hex_key)
-            
-            # Derive addresses
             addresses = {}
-            
-            # ETH
+
+            # ETH - via eth_keys
             try:
                 from eth_keys import keys
                 pk = keys.PrivateKey(privkey)
                 addresses['eth'] = pk.public_key.to_checksum_address()
-            except:
+            except Exception as e:
+                print(f"[KeyReducer] ETH (eth_keys) derivation failed: {e}")
+                # Fallback to blockthon ETH
+                try:
+                    if BLOCKTHON_AVAILABLE and eth_addr:
+                        addresses['eth'] = eth_addr(hex_key)
+                except:
+                    pass
+
+            # BTC - via bit/btc_recover
+            try:
+                btc = btc_from_hex(hex_key)
+                if btc:
+                    addresses.update(btc)
+            except Exception as e:
+                print(f"[KeyReducer] BTC derivation failed: {e}")
+
+            # All other chains via blockthon
+            addresses = self._derive_all_chains(hex_key, base_addresses=addresses)
+
+            return {
+                'private_key_hex': hex_key.lower(),
+                'addresses': addresses,
+            }
+        except Exception as e:
+            print(f"[KeyReducer] _from_hex error: {e}")
+            return None
+
+    def _from_wif(self, wif: str) -> Optional[dict]:
+        """Convert WIF to all forms across ALL chains"""
+        try:
+            btc = btc_from_wif(wif)
+            if not btc:
+                return None
+
+            hex_key = btc.get('private_key_hex')
+            if not hex_key:
+                return None
+
+            addresses = {}
+            if 'btc' in btc:
+                addresses['btc'] = btc['btc']
+
+            # ETH
+            try:
+                privkey = bytes.fromhex(hex_key)
+                from eth_keys import keys
+                pk = keys.PrivateKey(privkey)
+                addresses['eth'] = pk.public_key.to_checksum_address()
+            except Exception:
                 pass
-            
+
+            # All other chains via blockthon
+            addresses = self._derive_all_chains(hex_key, base_addresses=addresses)
+
             return {
                 'private_key_hex': hex_key,
                 'addresses': addresses,
             }
-        except:
+        except Exception as e:
+            print(f"[KeyReducer] _from_wif error: {e}")
             return None
-    
-    def _from_wif(self, wif: str) -> Optional[dict]:
-        """Convert WIF to all forms"""
-        try:
-            import base58
-            decoded = base58.b58decode(wif)
-            
-            # Remove version byte and checksum
-            privkey = decoded[1:-4]
-            
-            return self._from_hex(privkey.hex())
-        except:
-            return None
+
+    def _derive_all_chains(self, hex_key: str, base_addresses: Dict = None) -> Dict:
+        """Derive addresses for ALL supported chains from hex private key"""
+        addresses = dict(base_addresses) if base_addresses else {}
+        if not BLOCKTHON_AVAILABLE:
+            return addresses
+
+        # Map chain_id -> function
+        chain_funcs = [
+            ('ltc', ltc_addr),
+            ('doge', doge_addr),
+            ('dash', dash_addr),
+            ('dgb', dgb_addr),
+            ('btg', btg_addr),
+            ('qtum', qtum_addr),
+            ('rvn', rvn_addr),
+            ('trx', trx_addr),
+            ('zec', zec_addr),
+        ]
+
+        for chain_id, func in chain_funcs:
+            if chain_id in addresses or func is None:
+                continue
+            try:
+                addr = func(hex_key)
+                if addr and isinstance(addr, str) and len(addr) > 10:
+                    addresses[chain_id] = addr
+            except Exception:
+                pass
+        return addresses
     
     def _from_xprv(self, xprv: str) -> Optional[dict]:
         """Convert xprv to all forms"""
@@ -172,37 +283,76 @@ class KeyReducerAgent:
             return None
     
     def _check_balances(self, addresses: Dict[str, str]) -> Dict[str, float]:
-        """Check balances for all addresses"""
+        """Check balances for all addresses across ALL chains"""
+        import requests
         balances = {}
         
         for coin, address in addresses.items():
+            balance_val = 0.0
+            
+            # Try configured balance checker first (for ETH/BTC from balance_checker.py)
             if coin in self.balance_checkers:
                 try:
-                    balances[coin] = self.balance_checkers[coin](address)
+                    result = self.balance_checkers[coin](address)
+                    if hasattr(result, 'confirmed'):
+                        balance_val = float(result.confirmed)
+                    else:
+                        balance_val = float(result)
                 except:
-                    balances[coin] = 0.0
+                    pass
+            
+            # Try atomicwallet API for other chains
+            if balance_val == 0.0 and coin in BALANCE_APIS:
+                try:
+                    url = BALANCE_APIS[coin].format(addr=address)
+                    resp = requests.get(url, timeout=10)
+                    data = resp.json()
+                    bal_str = data.get('balance', '0')
+                    balance_val = float(bal_str)
+                except:
+                    pass
+            
+            # Fallback: try eth checker for any 0x address
+            if balance_val == 0.0 and address.startswith('0x'):
+                try:
+                    from .balance_checker import eth_balance_etherscan
+                    result = eth_balance_etherscan(address)
+                    balance_val = float(result.confirmed)
+                except:
+                    pass
+            
+            balances[coin] = balance_val
         
         return balances
     
     def _process_key(self, key_type: str, value: str, source: str, context: str):
-        """Process a detected key"""
+        """Process a detected key - check ALL balances across ALL chains"""
         # Normalize
         normalized = self._normalize_key(key_type, value)
         if not normalized:
             return
         
-        # Check balances
-        balances = self._check_balances(normalized['addresses'])
+        addresses = normalized['addresses']
+        if not addresses:
+            return
         
-        # Calculate total USD
-        total_usd = sum(balances.values()) * 3000  # Simplified
+        print(f"[KeyReducer] Found {key_type}: {value[:20]}... -> {len(addresses)} chains: {list(addresses.keys())}")
         
-        if total_usd >= self.min_balance_usd:
+        # Check balances across ALL chains
+        balances = self._check_balances(addresses)
+        
+        # Calculate total USD (simplified: 1 unit = 3000 USD estimation)
+        total_usd = sum(balances.values()) * 3000
+        
+        # Check for any non-zero balances
+        non_zero = {c: b for c, b in balances.items() if b > 0}
+        
+        if non_zero or total_usd >= self.min_balance_usd:
             key_found = KeyFound(
                 key_type=key_type,
                 raw_value=value,
                 private_key_hex=normalized.get('private_key_hex'),
-                addresses=normalized['addresses'],
+                addresses=addresses,
                 balances=balances,
                 total_usd=total_usd,
                 source=source,
@@ -217,7 +367,7 @@ class KeyReducerAgent:
                     source=source,
                     metadata={
                         'key_type': key_type,
-                        'addresses': normalized['addresses'],
+                        'addresses': addresses,
                         'balances': balances,
                         'total_usd': total_usd,
                     }
@@ -226,16 +376,17 @@ class KeyReducerAgent:
             # Emit event
             self._output_queue.put_nowait(key_found)
             
-            # Notify assistant (without raw key)
+            # Notify assistant
             if self.assistant:
                 self.assistant.receive_event(
                     "key_reducer:found",
                     data={
                         'key_type': key_type,
-                        'addresses': normalized['addresses'],
+                        'addresses': addresses,
                         'balances': balances,
                         'total_usd': total_usd,
                         'source': source,
+                        'non_zero_chains': list(non_zero.keys()),
                     }
                 )
     

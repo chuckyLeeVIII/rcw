@@ -12,6 +12,7 @@ export const API_KEYS = {
   BLOCKCYPHER_TOKEN: import.meta.env.VITE_BLOCKCYPHER_TOKEN || '',
   OPENSEA_API_KEY: import.meta.env.VITE_OPENSEA_API_KEY || '',
   ALCHEMY_API_KEY: import.meta.env.VITE_ALCHEMY_API_KEY || '',
+  WALLETCONNECT_PROJECT_ID: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'e0397c27c421097b2d5c812d0220b0ca',
 } as const;
 
 // ─── Dev Fees (percentages as decimals) ───────────────────────────────────
@@ -33,6 +34,8 @@ export const INFURA_RPC = {
   arbitrum: `https://arbitrum-mainnet.infura.io/v3/${API_KEYS.INFURA_PROJECT_ID}`,
   optimism: `https://optimism-mainnet.infura.io/v3/${API_KEYS.INFURA_PROJECT_ID}`,
   goerli: `https://goerli.infura.io/v3/${API_KEYS.INFURA_PROJECT_ID}`,
+  base: `https://base-mainnet.infura.io/v3/${API_KEYS.INFURA_PROJECT_ID}`,
+  avalanche: `https://avalanche-mainnet.infura.io/v3/${API_KEYS.INFURA_PROJECT_ID}`,
 } as const;
 
 // ─── Network Configuration ────────────────────────────────────────────────
@@ -57,10 +60,24 @@ export function calcNetAmount(amount: number, feeType: 'TRANSFER' | 'RECOVERY' |
   return amount - calcDevFee(amount, feeType);
 }
 
+// Recovery network explorers (maps recoveryPool network IDs to explorer URLs)
+const RECOVERY_EXPLORERS: Record<string, string> = {
+  bitcoin: 'https://blockchair.com/bitcoin',
+  'bitcoin-testnet': 'https://blockchair.com/bitcoin/testnet',
+  litecoin: 'https://blockchair.com/litecoin',
+  dogecoin: 'https://blockchair.com/dogecoin',
+  dash: 'https://blockchair.com/dash',
+  ethereum: 'https://etherscan.io',
+  'ethereum-classic': 'https://blockchair.com/ethereum-classic',
+  'bitcoin-cash': 'https://blockchair.com/bitcoin-cash',
+};
+
 export function getExplorerUrl(networkId: string, txHash: string): string {
   const network = NETWORKS.find(n => n.id === networkId);
-  if (!network) return '';
-  return `${network.explorer}/tx/${txHash}`;
+  if (network) return `${network.explorer}/tx/${txHash}`;
+  const recoveryExplorer = RECOVERY_EXPLORERS[networkId];
+  if (recoveryExplorer) return `${recoveryExplorer}/address/${txHash}`;
+  return '';
 }
 
 export function getNetworkRpc(networkId: string): string {

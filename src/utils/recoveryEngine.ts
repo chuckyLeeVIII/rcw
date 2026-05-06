@@ -6,6 +6,14 @@ import { DiscoveredWallet, SUPPORTED_NETWORKS, BIP44_PURPOSE, BIP49_PURPOSE, BIP
 const NETWORK_CONFIGS: Record<string, bitcoin.networks.Network> = {
   bitcoin: bitcoin.networks.bitcoin,
   'bitcoin-testnet': bitcoin.networks.testnet,
+  'bitcoin-cash': {
+    ...bitcoin.networks.bitcoin,
+    messagePrefix: '\x18BitcoinCash Signed Message:\n',
+    bech32: 'bch',
+    pubKeyHash: 0x00,
+    scriptHash: 0x05,
+    wif: 0x80,
+  },
   litecoin: {
     ...bitcoin.networks.bitcoin,
     messagePrefix: '\x19Litecoin Signed Message:\n',
@@ -201,7 +209,7 @@ export async function scanSeedPhrase(
             if (result) {
               const wallet: DiscoveredWallet = {
                 id: `${network.id}-${purpose}-${account}-${change}-${index}-${Date.now()}`,
-                network: network.name,
+                network: network.id,
                 path: result.path,
                 address: result.address,
                 publicKey: result.publicKey,
@@ -255,7 +263,7 @@ export async function scanPrivateKey(
         const wallet = new ethers.Wallet(key);
         wallets.push({
           id: `${network.id}-eth-${Date.now()}`,
-          network: network.name,
+          network: network.id,
           path: 'direct',
           address: wallet.address,
           publicKey: wallet.publicKey,
@@ -288,7 +296,7 @@ export async function scanPrivateKey(
             if (address) {
               wallets.push({
                 id: `${network.id}-wif-${Date.now()}-${idx}`,
-                network: network.name,
+                network: network.id,
                 path: 'WIF',
                 address,
                 publicKey: pubkey?.toString('hex'),
@@ -317,7 +325,7 @@ export async function scanPrivateKey(
             if (legacyAddr && legacyAddr !== address) {
               wallets.push({
                 id: `${network.id}-legacy-${Date.now()}-${idx}`,
-                network: network.name,
+                network: network.id,
                 path: 'legacy-p2pkh',
                 address: legacyAddr,
                 publicKey: legacyPub?.toString('hex'),
@@ -348,7 +356,7 @@ export async function scanPrivateKey(
             if (address) {
               wallets.push({
                 id: `${network.id}-hex-${Date.now()}-${idx}`,
-                network: network.name,
+                network: network.id,
                 path: 'direct-hex',
                 address,
                 publicKey: pubkey?.toString('hex'),

@@ -11,9 +11,10 @@ import {
   HelpCircle,
   Bell,
   Shield,
-  Activity,
   Layers,
-  ShoppingBag
+  ShoppingBag,
+  HardDrive,
+  BookOpen
 } from 'lucide-react';
 
 const mainNavItems = [
@@ -22,9 +23,10 @@ const mainNavItems = [
   { to: '/send', icon: Send, label: 'Send' },
   { to: '/history', icon: History, label: 'History' },
   { to: '/recovery', icon: Key, label: 'Recovery' },
-  { to: '/pool', icon: Layers, label: 'Recovery Pool' },
+  { to: '/pool', icon: Layers, label: 'Pool' },
   { to: '/marketplace', icon: ShoppingBag, label: 'NFT Market' },
-  { to: '/keys', icon: Shield, label: 'Keys & Contracts' },
+  { to: '/ledger', icon: BookOpen, label: 'Master Ledger' },
+  { to: '/scan', icon: HardDrive, label: 'PC Search' },
 ];
 
 const bottomNavItems = [
@@ -39,12 +41,12 @@ export function Sidebar() {
 
   return (
     <div
-      className={`relative transition-all duration-300 border-r border-purple-500/10 ${isCollapsed ? 'w-20' : 'w-72'
-        }`}
+      className={`relative flex flex-col transition-all duration-300 border-r border-purple-500/10 ${isCollapsed ? 'w-20' : 'w-72'}`}
       style={{
         background: 'linear-gradient(180deg, rgba(17,24,39,0.95) 0%, rgba(10,15,30,0.98) 100%)',
         backdropFilter: 'blur(20px)',
-        minHeight: '100vh',
+        height: '100vh',
+        maxHeight: '100vh',
       }}
     >
       {/* Ambient glow */}
@@ -55,20 +57,19 @@ export function Sidebar() {
       {/* Toggle button */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-6 p-1.5 rounded-full transition-all duration-300 z-10 hover:scale-110"
+        className="absolute -right-3 top-6 p-1.5 rounded-full transition-all duration-300 z-50 hover:scale-110"
         style={{
           background: 'linear-gradient(135deg, rgba(139,92,246,0.3), rgba(6,182,212,0.3))',
           border: '1px solid rgba(139,92,246,0.4)',
           boxShadow: '0 0 10px rgba(139,92,246,0.2)',
         }}
       >
-        <ChevronLeft className={`w-3.5 h-3.5 text-purple-300 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''
-          }`} />
+        <ChevronLeft className={`w-3.5 h-3.5 text-purple-300 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
       </button>
 
-      <div className="relative p-4">
+      <div className="relative flex flex-col h-full p-4 overflow-hidden">
         {/* Logo */}
-        <div className="flex items-center space-x-3 mb-8 px-3 py-4 rounded-xl" style={{
+        <div className="flex items-center space-x-3 mb-4 px-3 py-3 rounded-xl flex-shrink-0" style={{
           background: 'linear-gradient(135deg, rgba(139,92,246,0.05), rgba(6,182,212,0.05))',
           border: '1px solid rgba(139,92,246,0.1)',
         }}>
@@ -87,8 +88,8 @@ export function Sidebar() {
           )}
         </div>
 
-        {/* Main Navigation */}
-        <nav className="space-y-1">
+        {/* Main Navigation — scrollable */}
+        <nav className="space-y-1 flex-1 overflow-y-auto min-h-0 pr-1" style={{ scrollbarWidth: 'thin' }}>
           {mainNavItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -97,7 +98,7 @@ export function Sidebar() {
             >
               {({ isActive }) => (
                 <div
-                  className={`flex items-center space-x-3 px-3 py-3 rounded-xl transition-all duration-200 relative group cursor-pointer ${isActive
+                  className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative group cursor-pointer ${isActive
                     ? 'text-white'
                     : 'text-gray-400 hover:text-gray-200'
                     }`}
@@ -109,8 +110,7 @@ export function Sidebar() {
                     border: '1px solid transparent',
                   }}
                 >
-                  <Icon className={`w-5 h-5 transition-all duration-200 group-hover:scale-110 ${isCollapsed ? 'mx-auto' : ''
-                    } ${isActive ? 'text-purple-400' : ''}`} />
+                  <Icon className={`w-5 h-5 transition-all duration-200 group-hover:scale-110 ${isCollapsed ? 'mx-auto' : ''} ${isActive ? 'text-purple-400' : ''}`} />
                   {!isCollapsed && (
                     <span className="font-medium text-sm tracking-wide">{label}</span>
                   )}
@@ -131,16 +131,16 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Notifications */}
-        <div className="mt-6">
+        {/* Notifications — no longer pushes into bottom nav */}
+        <div className="mt-2 flex-shrink-0">
           <div
-            className={`flex items-center space-x-3 px-3 py-3 rounded-xl text-gray-400 hover:text-gray-200 transition-all duration-200 cursor-pointer relative group`}
+            className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-400 hover:text-gray-200 transition-all duration-200 cursor-pointer relative group`}
             style={{ border: '1px solid transparent' }}
           >
             <div className="relative">
               <Bell className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
               {notifications > 0 && (
-                <span className="absolute -top-1 -right-1 text-[10px] bg-gradient-to-r from-purple-500 to-cyan-400 text-white rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                <span className="absolute -top-1 -right-1 text-[10px] bg-gradient-to-r from-purple-500 to-cyan-400 text-white rounded-full w-4 h-4 flex items-center justify-center font-bold z-10">
                   {notifications}
                 </span>
               )}
@@ -149,8 +149,8 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Bottom Nav */}
-        <div className="absolute bottom-6 left-0 right-0 px-4">
+        {/* Bottom Nav — sits naturally at bottom, no absolute positioning */}
+        <div className="mt-2 pt-2 border-t border-purple-500/10 flex-shrink-0">
           <div className="space-y-1">
             {bottomNavItems.map(({ to, icon: Icon, label }) => (
               <NavLink
@@ -159,15 +159,14 @@ export function Sidebar() {
               >
                 {({ isActive }) => (
                   <div
-                    className={`flex items-center space-x-3 px-3 py-3 rounded-xl transition-all duration-200 group cursor-pointer ${isActive ? 'text-gray-200' : 'text-gray-500 hover:text-gray-300'
+                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 group cursor-pointer ${isActive ? 'text-gray-200' : 'text-gray-500 hover:text-gray-300'
                       }`}
                     style={isActive ? {
                       background: 'rgba(139,92,246,0.1)',
                       border: '1px solid rgba(139,92,246,0.15)',
                     } : { border: '1px solid transparent' }}
                   >
-                    <Icon className={`w-5 h-5 transition-transform duration-200 group-hover:scale-110 ${isCollapsed ? 'mx-auto' : ''
-                      }`} />
+                    <Icon className={`w-5 h-5 transition-transform duration-200 group-hover:scale-110 ${isCollapsed ? 'mx-auto' : ''}`} />
                     {!isCollapsed && <span className="font-medium text-sm">{label}</span>}
                   </div>
                 )}

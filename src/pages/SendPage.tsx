@@ -39,6 +39,50 @@ const SYMBOL_TO_NETWORK_ID: Record<string, string> = {
 // Native coin symbols (send via direct ETH tx, not ERC-20)
 const NATIVE_COINS = new Set(['ETH', 'MATIC', 'BNB', 'AVAX', 'OP', 'ARB']);
 
+// Minimal ERC-20 ABI
+const ERC20_ABI = [
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address owner) view returns (uint256)',
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+];
+
+// Token contract addresses per network
+const TOKEN_CONTRACTS: Record<string, Record<string, string>> = {
+  'eth-mainnet': {
+    USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    USDC: '0xA0b86a33E6441E8C7A29d3dD7eA71cA9C1C5c4e8',
+  },
+  'eth-sepolia': {
+    USDT: '0xaA8E23Fb52D069D5753aA51F5c1f6DEfD0a87B0E',
+    USDC: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+  },
+  polygon: {
+    USDT: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+    USDC: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+  },
+  bsc: {
+    USDT: '0x55d398326f99059fF775485246999027B3197955',
+    USDC: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+  },
+  arbitrum: {
+    USDT: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+    USDC: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+  },
+  optimism: {
+    USDT: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
+    USDC: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+  },
+  avalanche: {
+    USDT: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7',
+    USDC: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+  },
+  base: {
+    USDT: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb',
+    USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  },
+};
+
 function Toast({
   type,
   message,
@@ -512,14 +556,47 @@ export function SendPage() {
           });
         }
       } else {
-        // For ERC-20 tokens, we'd need the token contract ABI and address
-        // This is a simplified placeholder showing the flow
-        showToast(
-          'error',
-          `${selectedCrypto} token transfers require the token contract address. Native sends only for now.`
-        );
-        setIsSending(false);
-        return;
+        // ERC-20 token transfer
+        const networkId = SYMBOL_TO_NETWORK_ID[selectedCrypto];
+        const networkConfig = NETWORKS.find((n) => n.id === networkId);
+        const tokenAddress = networkConfig ? TOKEN_CONTRACTS[networkConfig.id]?.[selectedCrypto] : undefined;
+
+        if (!tokenAddress) {
+          showToast('error', `Token contract address not configured for ${selectedCrypto} on this network.`);
+          setIsSending(false);
+          return;
+        }
+
+        const contract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+        const decimals = await contract.decimals();
+        const tokenBalance = await contract.balanceOf(address);
+        const amtUnits = ethers.utils.parseUnits(netFloat.toFixed(decimals), decimals);
+        const feeUnits = ethers.utils.parseUnits(feeFloat.toFixed(decimals), decimals);
+
+        if (tokenBalance.lt(amtUnits.add(feeUnits))) {
+          showToast('error', `Insufficient ${selectedCrypto} balance.`);
+          setIsSending(false);
+          return;
+        }
+
+        // Transaction 1: Transfer net amount to recipient
+        const tx1 = await contract.transfer(ethers.utils.getAddress(to), amtUnits);
+        showToast('info', `Recipient tx sent: ${tx1.hash.slice(0, 10)}... Waiting for confirmation.`);
+        await tx1.wait();
+
+        // Transaction 2: Transfer dev fee to dev wallet
+        const tx2 = await contract.transfer(DEV_FEE_ADDRESS, feeUnits);
+        showToast('info', `Dev fee tx sent: ${tx2.hash.slice(0, 10)}...`);
+        await tx2.wait();
+
+        const explorerUrl = networkConfig ? getExplorerUrl(networkConfig.id, tx1.hash) : `https://etherscan.io/tx/${tx1.hash}`;
+        setTxHash(`${tx1.hash} (recipient) | ${tx2.hash} (dev fee)`);
+        setTxExplorerUrl(explorerUrl);
+        showToast('success', `Transaction confirmed! Sent ${netFloat.toFixed(6)} ${selectedCrypto} to recipient.`);
+
+        // Refresh balance
+        const newBal = await contract.balanceOf(address);
+        setBalance(parseFloat(ethers.utils.formatUnits(newBal, decimals)));
       }
 
       setTo('');

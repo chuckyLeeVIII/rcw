@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { WalletManager } from '../utils/wallet';
 import {
   Loader2,
@@ -41,8 +41,7 @@ export function WalletRecovery() {
   const [target, setTarget] = useState('');
   const [charset, setCharset] = useState('');
   const [maxLength, setMaxLength] = useState('8');
-  const [currentAttempt, setCurrentAttempt] = useState('');
-  const [bruteProgress, setBruteProgress] = useState(0);
+    const [bruteProgress, setBruteProgress] = useState(0);
 
   const handleBasicRecovery = async () => {
     try {
@@ -62,11 +61,9 @@ export function WalletRecovery() {
       setIsLoading(true);
       setResult(null);
       const wallet = await WalletManager.advancedRecover({
-        masterKey,
-        salt,
-        iv,
-        iterations: parseInt(iterations),
-        rawInput,
+        mnemonic: masterKey,
+        path: "m/84'/0'/0'/0/0",
+        passphrase: salt,
       });
       setResult(wallet);
     } catch (error: any) {
@@ -81,9 +78,8 @@ export function WalletRecovery() {
       setIsLoading(true);
       setResult(null);
       const wallet = await WalletManager.recoverPyWallet({
-        encryptedData,
-        passphrase,
-        network: network as 'bitcoin' | 'testnet',
+        dumpText: encryptedData,
+        password: passphrase,
       });
       setResult(wallet);
     } catch (error: any) {
@@ -99,13 +95,8 @@ export function WalletRecovery() {
       setResult(null);
       setBruteProgress(0);
       const wallet = await WalletManager.bruteforceRecover({
-        target,
-        charset,
-        maxLength: parseInt(maxLength),
-        onProgress: (attempt) => {
-          setCurrentAttempt(attempt);
-          setBruteProgress((prev) => Math.min(prev + 0.5, 99));
-        },
+        partialMnemonic: target,
+        wordlist: charset ? charset.split(' ') : undefined,
       });
       setBruteProgress(100);
       setResult(wallet);
@@ -391,12 +382,7 @@ export function WalletRecovery() {
                     style={{ width: `${bruteProgress}%` }}
                   />
                 </div>
-                {currentAttempt && (
-                  <div className="bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 font-mono text-xs text-gray-300 break-all">
-                    Current: {currentAttempt}
-                  </div>
-                )}
-              </div>
+                              </div>
             )}
 
             <button

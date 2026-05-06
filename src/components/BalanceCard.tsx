@@ -97,7 +97,8 @@ export function BalanceCard() {
           : filteredCryptos.map((crypto) => {
             const networkId = symbolToNetworkId[crypto.symbol] || 'eth-mainnet';
             const bal = balances.get(networkId);
-            const balanceValue = bal ? bal.confirmed.toFixed(8) : isConnected ? '0.00000000' : '--';
+            const isFetched = NETWORKS.some(n => n.id === networkId);
+            const balanceValue = bal ? bal.confirmed.toFixed(8) : isConnected ? (isFetched ? '0.00000000' : '--') : '--';
 
             return (
               <div

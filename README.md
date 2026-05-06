@@ -27,7 +27,7 @@ PyGUI Wallet is a comprehensive multi-cryptocurrency wallet with advanced recove
 - **OPSEC Scoring**: Rates your environment's key exposure risk
 - **Audit Trail**: Complete log of all detected key-like strings with timestamps and context
 
-### � MixHunter Key Hunting Engine
+### 🔍 MixHunter Key Hunting Engine
 
 - **High-Speed Key Generation**: 3 methods (Random Number, Random Word-to-Hex, Random Hex)
 - **Multi-Coin Support**: ETH, LTC, DASH, DOGE with parallel threading

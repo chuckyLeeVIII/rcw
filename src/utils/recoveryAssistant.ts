@@ -2,6 +2,126 @@ import { PoolWallet } from '../context/RecoveryPoolContext';
 import { SUPPORTED_NETWORKS } from '../types/recoveryPool';
 import { getAllDerivationPathTemplates } from './recoveryEngine';
 
+export interface ParsedWalletFile {
+  keys: string[];
+  seeds: string[];
+  shards: string[];
+  error?: string;
+}
+
+export function parseWalletFile(content: string, filename: string): ParsedWalletFile {
+  const result: ParsedWalletFile = { keys: [], seeds: [], shards: [] };
+  
+  try {
+    // Try JSON parsing first (MetaMask, MyEtherWallet, etc.)
+    if (filename.endsWith('.json') || content.trim().startsWith('{')) {
+      const json = JSON.parse(content);
+      
+      // MetaMask/MEW keystore
+      if (json.crypto || json.Crypto) {
+        result.keys.push(`Keystore: ${json.address || 'unknown'}`);
+      }
+      
+      // Wallet backup with mnemonic
+      if (json.mnemonic || json.seedPhrase || json.phrase) {
+        result.seeds.push(json.mnemonic || json.seedPhrase || json.phrase);
+      }
+      
+      // Array of keys
+      if (Array.isArray(json)) {
+        json.forEach((item: any) => {
+          if (item.privateKey || item.wif || item.key) {
+            result.keys.push(item.privateKey || item.wif || item.key);
+          }
+          if (item.mnemonic || item.seed) {
+            result.seeds.push(item.mnemonic || item.seed);
+          }
+        });
+      }
+      
+      // BIP39/HD wallet
+      if (json.hdPath || json.derivationPath) {
+        result.seeds.push(`HD Wallet: ${json.hdPath || json.derivationPath}`);
+      }
+      
+      // Key shards (SSS)
+      if (json.shares || json.shards || json.threshold) {
+        const shards = json.shares || json.shards || [];
+        if (Array.isArray(shards)) {
+          result.shards.push(...shards);
+        }
+      }
+    }
+    
+    // Text-based parsing for .txt, .key, .csv files
+    const lines = content.split(/\r?\n/);
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      
+      // Private key (hex 64 chars)
+      if (/^[a-f0-9]{64}$/i.test(trimmed)) {
+        result.keys.push(trimmed);
+        continue;
+      }
+      
+      // WIF format (starts with 5, K, or L)
+      if (/^[5KL][1-9A-HJ-NP-Za-km-z]{50,51}$/.test(trimmed)) {
+        result.keys.push(trimmed);
+        continue;
+      }
+      
+      // BIP39 mnemonic (12-24 words)
+      const wordCount = trimmed.split(/\s+/).length;
+      if (wordCount >= 12 && wordCount <= 24 && /^[a-z\s]+$/i.test(trimmed)) {
+        result.seeds.push(trimmed);
+        continue;
+      }
+      
+      // Key shard format (base64-ish with share identifier)
+      if (/share|shard|sss/i.test(trimmed) && trimmed.length > 20) {
+        result.shards.push(trimmed);
+        continue;
+      }
+      
+      // Master key / xprv
+      if (/^xprv[a-zA-Z0-9]{107,111}$/.test(trimmed) || /^[xyzt]prv/.test(trimmed)) {
+        result.keys.push(`xprv: ${trimmed.slice(0, 20)}...`);
+        continue;
+      }
+      
+      // JSON lines
+      if (trimmed.startsWith('{')) {
+        try {
+          const jsonLine = JSON.parse(trimmed);
+          if (jsonLine.privateKey) result.keys.push(jsonLine.privateKey);
+          if (jsonLine.wif) result.keys.push(jsonLine.wif);
+          if (jsonLine.mnemonic) result.seeds.push(jsonLine.mnemonic);
+        } catch { /* ignore */ }
+      }
+    }
+    
+    // CSV parsing
+    if (filename.endsWith('.csv')) {
+      const rows = content.split(/\r?\n/);
+      for (const row of rows) {
+        const cols = row.split(',');
+        for (const col of cols) {
+          const val = col.trim().replace(/^"|"$/g, '');
+          if (/^[a-f0-9]{64}$/i.test(val)) result.keys.push(val);
+          if (/^[5KL][1-9A-HJ-NP-Za-km-z]{50,51}$/.test(val)) result.keys.push(val);
+        }
+      }
+    }
+    
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : 'Parse error';
+  }
+  
+  return result;
+}
+
 export interface AssistantRecommendation {
   summary: string;
   confidence: 'low' | 'medium' | 'high';
