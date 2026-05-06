@@ -98,7 +98,16 @@ export function BalanceCard() {
             const networkId = symbolToNetworkId[crypto.symbol] || 'eth-mainnet';
             const bal = balances.get(networkId);
             const isFetched = NETWORKS.some(n => n.id === networkId);
-            const balanceValue = bal ? bal.confirmed.toFixed(8) : isConnected ? (isFetched ? '0.00000000' : '--') : '--';
+            
+            const confirmed = bal ? bal.confirmed : 0;
+            const unconfirmed = bal ? bal.unconfirmed : 0;
+            const total = confirmed + unconfirmed;
+            
+            const balanceValue = bal 
+              ? total.toFixed(8) 
+              : isConnected 
+                ? (isFetched ? '0.00000000' : '--') 
+                : '--';
 
             return (
               <div
@@ -130,7 +139,14 @@ export function BalanceCard() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono text-sm">{balanceValue}</div>
+                  <div className="font-mono text-sm">
+                    {balanceValue}
+                    {unconfirmed > 0 && (
+                      <span className="text-[10px] text-yellow-500 block">
+                        (+{unconfirmed.toFixed(8)} pending)
+                      </span>
+                    )}
+                  </div>
                   {bal && <div className="text-xs text-gray-600 truncate max-w-[100px] ml-auto">{bal.source}</div>}
                 </div>
               </div>

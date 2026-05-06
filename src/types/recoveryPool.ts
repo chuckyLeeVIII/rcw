@@ -206,13 +206,17 @@ export interface RecoveryReport {
   recommendations: string[];
 }
 
-export function calculateTotalBalances(wallets: DiscoveredWallet[]): Record<string, { total: number; formatted: string; symbol: string }> {
-  const totals: Record<string, { total: number; formatted: string; symbol: string }> = {};
+export function calculateTotalBalances(wallets: DiscoveredWallet[]): Record<string, { total: number; confirmed: number; unconfirmed: number; formatted: string; symbol: string }> {
+  const totals: Record<string, { total: number; confirmed: number; unconfirmed: number; formatted: string; symbol: string }> = {};
   for (const wallet of wallets) {
     if (!totals[wallet.network]) {
-      totals[wallet.network] = { total: 0, formatted: '0', symbol: wallet.symbol };
+      totals[wallet.network] = { total: 0, confirmed: 0, unconfirmed: 0, formatted: '0', symbol: wallet.symbol };
     }
-    totals[wallet.network].total += wallet.balance;
+    const confirmed = wallet.balance || 0;
+    const unconfirmed = wallet.unconfirmedBalance || 0;
+    totals[wallet.network].confirmed += confirmed;
+    totals[wallet.network].unconfirmed += unconfirmed;
+    totals[wallet.network].total += (confirmed + unconfirmed);
     totals[wallet.network].formatted = totals[wallet.network].total.toFixed(8);
   }
   return totals;

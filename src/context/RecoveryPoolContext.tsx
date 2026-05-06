@@ -505,7 +505,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
       type: 'seed',
       label: `Seed: ${mnemonic.split(' ').slice(0, 4).join(' ')}...`,
       timestamp: Date.now(),
-      walletsFound: withBalances.filter(w => w.balance > 0).length,
+      walletsFound: withBalances.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
     };
 
     setState(prev => {
@@ -526,7 +526,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setStats(prev => ({
       ...prev,
       totalScanned: prev.totalScanned + wallets.length,
-      totalFound: prev.totalFound + withBalances.filter(w => w.balance > 0).length,
+      totalFound: prev.totalFound + withBalances.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
     }));
   }, []);
 
@@ -544,7 +544,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
       type: 'privateKey',
       label: `Key: ${privateKey.slice(0, 10)}...`,
       timestamp: Date.now(),
-      walletsFound: withBalances.filter(w => w.balance > 0).length,
+      walletsFound: withBalances.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
     };
 
     setState(prev => {
@@ -564,7 +564,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     setStats(prev => ({
       ...prev,
-      totalFound: prev.totalFound + withBalances.filter(w => w.balance > 0).length,
+      totalFound: prev.totalFound + withBalances.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
     }));
   }, []);
 
@@ -639,7 +639,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
       type: 'computer_scan',
       label: `Computer Scan: ${hits.length} artifacts`,
       timestamp: Date.now(),
-      walletsFound: withBalances.filter(w => w.balance > 0).length,
+      walletsFound: withBalances.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
       metadata: { hitsCount: hits.length },
     };
 
@@ -673,7 +673,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setStats(prev => ({
       ...prev,
       totalScanned: prev.totalScanned + hits.length,
-      totalFound: prev.totalFound + wallets.filter(w => w.balance > 0).length,
+      totalFound: prev.totalFound + wallets.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
     }));
   }, [setState, nextId, toPoolWallet, checkAllBalances]);
 
@@ -745,7 +745,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
       type: 'datFile',
       label: `File: ${file.name}`,
       timestamp: Date.now(),
-      walletsFound: withBalances.filter(w => w.balance > 0).length,
+      walletsFound: withBalances.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
     };
 
     setState(prev => {
@@ -766,7 +766,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setStats(prev => ({
       ...prev,
       totalScanned: prev.totalScanned + uniqueWallets.length,
-      totalFound: prev.totalFound + withBalances.filter(w => w.balance > 0).length,
+      totalFound: prev.totalFound + withBalances.filter(w => (w.balance > 0 || w.unconfirmedBalance > 0)).length,
     }));
   }, []);
 
@@ -1196,10 +1196,10 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const markAllClaimed = useCallback(() => {
     setState(prev => {
-      const unclaimed = prev.discoveredWallets.filter(w => !w.claimed && w.balance > 0);
+      const unclaimed = prev.discoveredWallets.filter(w => !w.claimed && (w.balance > 0 || w.unconfirmedBalance > 0));
       let totalTax = 0;
       const updated = prev.discoveredWallets.map(w => {
-        if (!w.claimed && w.balance > 0) {
+        if (!w.claimed && (w.balance > 0 || w.unconfirmedBalance > 0)) {
           const tax = w.balance * settings.devTaxRate;
           totalTax += tax;
           return { ...w, claimed: true, claimedAt: Date.now(), taxAmount: tax };

@@ -43,7 +43,7 @@ export function RecoveryPoolPage() {
   const totalBalance = recoveryPool.totalBalance || {};
 
   const filteredWallets = discoveredWallets.filter(w => {
-    if (filter === 'funded' && w.balance <= 0) return false;
+    if (filter === 'funded' && w.balance <= 0 && w.unconfirmedBalance <= 0) return false;
     if (filterNetwork !== 'all' && w.network !== filterNetwork) return false;
     return true;
   });
@@ -200,7 +200,7 @@ export function RecoveryPoolPage() {
             onClick={() => setFilter('funded')}
             className={`btn-neon px-3 py-1.5 rounded-lg text-sm border-green-500/30 ${filter === 'funded' ? 'ring-2 ring-green-400/50' : 'opacity-70'}`}
           >
-            Funded ({discoveredWallets.filter(w => w.balance > 0).length})
+            Funded ({discoveredWallets.filter(w => w.balance > 0 || w.unconfirmedBalance > 0).length})
           </button>
         </div>
         <select
@@ -229,12 +229,17 @@ export function RecoveryPoolPage() {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center space-x-3 mb-2">
-                    <div className={`w-2 h-2 rounded-full ${wallet.balance > 0 ? 'bg-green-400' : 'bg-gray-500'}`} />
+                    <div className={`w-2 h-2 rounded-full ${wallet.balance > 0 || wallet.unconfirmedBalance > 0 ? 'bg-green-400' : 'bg-gray-500'}`} />
                     <span className="text-sm font-medium text-white">{wallet.network}</span>
                     <span className="text-xs text-gray-500">{wallet.symbol}</span>
                     {wallet.balance > 0 && (
                       <span className="text-xs text-green-400 font-medium">
                         {wallet.balanceFormatted} {wallet.symbol}
+                      </span>
+                    )}
+                    {wallet.unconfirmedBalance > 0 && (
+                      <span className="text-xs text-yellow-400 font-medium">
+                        (+{wallet.unconfirmedBalanceFormatted} pending)
                       </span>
                     )}
                   </div>
