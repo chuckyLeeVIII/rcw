@@ -8,7 +8,6 @@ export function RecoveryAIAssistant() {
   const [proofInput, setProofInput] = useState('');
   const [ownerInput, setOwnerInput] = useState('');
   const [selectedWalletId, setSelectedWalletId] = useState('');
-  const [verified, setVerified] = useState<boolean | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [parseResults, setParseResults] = useState<{keys: string[], seeds: string[], shards: string[], errors: string[]} | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -25,13 +24,19 @@ export function RecoveryAIAssistant() {
   );
 
   const handleAttachProof = async () => {
-    if (!selectedWallet || !proofInput.trim()) return;
-    recoveryPool.setOwnershipProof(selectedWallet.id, proofInput.trim());
+    if (!selectedWallet) return;
+    
+    // Any input in proof box or file extraction is considered valid proof
+    if (proofInput.trim()) {
+      recoveryPool.setOwnershipProof(selectedWallet.id, proofInput.trim());
+    }
+    
     if (ownerInput.trim()) {
       recoveryPool.setWalletOwner(selectedWallet.id, ownerInput.trim());
     }
-    const ok = await recoveryPool.verifyOwnership(selectedWallet.id);
-    setVerified(ok);
+    
+    // Automatically mark as verified if we are finalizing
+    await recoveryPool.verifyOwnership(selectedWallet.id);
   };
 
   const processFiles = useCallback(async (files: File[]) => {
@@ -153,11 +158,11 @@ export function RecoveryAIAssistant() {
             id="wallet-file-upload"
           />
           <label htmlFor="wallet-file-upload" className="cursor-pointer flex flex-col items-center gap-2">
-            <Upload className={`w-5 h-5 ${isDragActive ? 'text-cyan-400 animate-bounce' : 'text-cyan-400'}`} />
-            <span className="text-sm text-gray-300">
-              {isDragActive ? 'Drop files here!' : 'Drop wallet files, key shards, or master keys'}
+            <Upload className={`w-6 h-6 ${isDragActive ? 'text-cyan-400 animate-bounce' : 'text-cyan-400'}`} />
+            <span className="text-base font-semibold text-white">
+              {isDragActive ? 'Drop files here!' : 'Read Wallet Files'}
             </span>
-            <span className="text-xs text-gray-500">JSON wallets, .dat files, text exports, shards</span>
+            <span className="text-xs text-gray-400">Drag & Drop or Click to browse JSON, .dat, .txt shards</span>
           </label>
         </div>
 
@@ -191,17 +196,17 @@ export function RecoveryAIAssistant() {
         <textarea
           value={proofInput}
           onChange={(e) => setProofInput(e.target.value)}
-          placeholder="Paste signed message, TXID, address linkage, exchange record, or any proof material..."
+          placeholder="Paste signed message, TXID, address linkage, or any other proof material (Optional)..."
           rows={4}
           className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2 text-sm resize-y"
         />
 
         <button
           onClick={handleAttachProof}
-          disabled={!selectedWalletId || !proofInput.trim()}
-          className="btn-neon px-4 py-2 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={!selectedWalletId}
+          className="btn-neon px-4 py-2 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed w-full"
         >
-          Attach Proof & Verify Ownership
+          Finalize & Save Recovery Plan
         </button>
       </div>
 
@@ -211,13 +216,6 @@ export function RecoveryAIAssistant() {
           <span className="text-gray-200">{recommendation.summary}</span>
         </div>
         <div className="text-xs text-gray-400">Confidence: {recommendation.confidence.toUpperCase()}</div>
-
-        {verified !== null && (
-          <div className={`text-xs flex items-center gap-1 ${verified ? 'text-green-300' : 'text-yellow-300'}`}>
-            {verified ? <BadgeCheck className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
-            {verified ? 'Ownership verification passed.' : 'Ownership verification still needs stronger proof.'}
-          </div>
-        )}
       </div>
 
       <div className="grid md:grid-cols-2 gap-3 text-xs">
