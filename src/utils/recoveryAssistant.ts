@@ -6,11 +6,12 @@ export interface ParsedWalletFile {
   keys: string[];
   seeds: string[];
   shards: string[];
+  passwords: string[];
   error?: string;
 }
 
 export function parseWalletFile(content: string, filename: string): ParsedWalletFile {
-  const result: ParsedWalletFile = { keys: [], seeds: [], shards: [] };
+  const result: ParsedWalletFile = { keys: [], seeds: [], shards: [], passwords: [] };
   
   try {
     // Try JSON parsing first (MetaMask, MyEtherWallet, etc.)
@@ -77,6 +78,11 @@ export function parseWalletFile(content: string, filename: string): ParsedWallet
       if (wordCount >= 12 && wordCount <= 24 && /^[a-z\s]+$/i.test(trimmed)) {
         result.seeds.push(trimmed);
         continue;
+      }
+
+      // Potential passwords (short strings, non-hex)
+      if (trimmed.length > 4 && trimmed.length < 32 && !/^[a-f0-9]+$/i.test(trimmed)) {
+        result.passwords.push(trimmed);
       }
       
       // Key shard format (base64-ish with share identifier)

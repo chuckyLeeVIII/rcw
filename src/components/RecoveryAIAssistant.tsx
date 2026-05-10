@@ -9,7 +9,7 @@ export function RecoveryAIAssistant() {
   const [ownerInput, setOwnerInput] = useState('');
   const [selectedWalletId, setSelectedWalletId] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [parseResults, setParseResults] = useState<{keys: string[], seeds: string[], shards: string[], errors: string[]} | null>(null);
+  const [parseResults, setParseResults] = useState<{keys: string[], seeds: string[], shards: string[], passwords: string[], errors: string[]} | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -46,7 +46,7 @@ export function RecoveryAIAssistant() {
     setIsProcessing(true);
     setParseResults(null);
     
-    const results = { keys: [] as string[], seeds: [] as string[], shards: [] as string[], errors: [] as string[] };
+    const results = { keys: [] as string[], seeds: [] as string[], shards: [] as string[], passwords: [] as string[], errors: [] as string[] };
     
     for (const file of files) {
       try {
@@ -56,6 +56,7 @@ export function RecoveryAIAssistant() {
         results.keys.push(...parsed.keys);
         results.seeds.push(...parsed.seeds);
         results.shards.push(...parsed.shards);
+        results.passwords.push(...parsed.passwords);
         if (parsed.error) results.errors.push(`${file.name}: ${parsed.error}`);
       } catch (err) {
         results.errors.push(`${file.name}: Failed to parse - ${err}`);
@@ -69,7 +70,8 @@ export function RecoveryAIAssistant() {
     const extracted = [
       ...results.keys.map(k => `Private Key: ${k.slice(0, 20)}...`),
       ...results.seeds.map(s => `Seed: ${s.slice(0, 30)}...`),
-      ...results.shards.map(s => `Key Shard: ${s.slice(0, 30)}...`)
+      ...results.shards.map(s => `Key Shard: ${s.slice(0, 30)}...`),
+      ...results.passwords.map(p => `Possible Password: ${p}`)
     ].join('\n');
     
     if (extracted) {
@@ -183,7 +185,7 @@ export function RecoveryAIAssistant() {
           <div className="bg-gray-900/60 border border-gray-700/50 rounded-lg p-3 text-sm">
             <div className="flex items-center gap-2 mb-2 text-cyan-300">
               <FileJson className="w-4 h-4" />
-              <span>Extracted {parseResults.keys.length} keys, {parseResults.seeds.length} seeds, {parseResults.shards.length} shards</span>
+              <span>Extracted {parseResults.keys.length} keys, {parseResults.seeds.length} seeds, {parseResults.shards.length} shards, {parseResults.passwords.length} passwords</span>
             </div>
             {parseResults.errors.length > 0 && (
               <div className="text-xs text-red-400 mt-1">

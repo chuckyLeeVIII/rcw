@@ -38,6 +38,8 @@ function getDerivationPath(purpose: number, coinType: number, account: number, c
 
 export function getAllDerivationPathTemplates(coinType: number): string[] {
   const templates: string[] = [];
+
+  // Standard BIPs
   const purposes = [BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE, BIP86_PURPOSE];
   for (const purpose of purposes) {
     for (let account = 0; account < DEFAULT_ACCOUNTS; account++) {
@@ -48,6 +50,17 @@ export function getAllDerivationPathTemplates(coinType: number): string[] {
       }
     }
   }
+
+  // Historical & Uncommon Legacy Shards
+  if (coinType === 0) {
+    templates.push("m/0'/0/0"); // BIP-32 Original / MultiBit HD / BRD
+    templates.push("m/0/0");   // Old Electrum (< 2.0)
+    templates.push("m/45'/0"); // BIP-45 Old Multisig
+    templates.push("m/48'/0'/0'/1'"); // BIP-48 Nested SegWit Multisig
+    templates.push("m/48'/0'/0'/2'"); // BIP-48 Native SegWit Multisig
+    templates.push("m/47'/0'/0'"); // BIP-47 Payment Codes
+  }
+
   return templates;
 }
 
@@ -116,37 +129,61 @@ async function deriveAddressFromSeed(
   }
 }
 
-// Derive legacy (P2PKH) address
-async function deriveLegacyAddress(
+// Derive legacy (P2PKH) address (handles both compressed and uncompressed)
+async function deriveLegacyAddresses(
   seed: string,
   networkId: string,
   coinType: number,
   account: number,
   change: number,
   index: number
-): Promise<{ address: string; publicKey: string; privateKey: string; path: string } | null> {
+): Promise<{ address: string; publicKey: string; privateKey: string; path: string }[]> {
+  const results = [];
   try {
     const network = getNetwork(networkId);
-    if (!network) return null;
+    if (!network) return [];
 
     const root = bitcoin.bip32.fromSeed(Buffer.from(seed, 'hex'), network);
     const path = getDerivationPath(BIP44_PURPOSE, coinType, account, change, index);
     const child = root.derivePath(path);
-    const { address, pubkey } = bitcoin.payments.p2pkh({
+
+    // 1. Compressed
+    const comp = bitcoin.payments.p2pkh({
       pubkey: child.publicKey,
       network,
     });
+    if (comp.address) {
+      results.push({
+        address: comp.address,
+        publicKey: child.publicKey.toString('hex'),
+        privateKey: child.toWIF(),
+        path: `${path} (comp)`,
+      });
+    }
 
-    if (!address || !pubkey) return null;
+    // 2. Uncompressed (Only for Bitcoin/Litecoin legacy)
+    if (['bitcoin', 'litecoin', 'dash'].includes(networkId)) {
+      try {
+        // Use secp256k1 to get uncompressed public key
+        const uncompressedPubkey = Buffer.from(secp.pointHex(child.publicKey, false), 'hex');
+        const uncomp = bitcoin.payments.p2pkh({
+          pubkey: uncompressedPubkey,
+          network,
+        });
+        if (uncomp.address) {
+          results.push({
+            address: uncomp.address,
+            publicKey: uncompressedPubkey.toString('hex'),
+            privateKey: child.toWIF(),
+            path: `${path} (uncomp)`,
+          });
+        }
+      } catch {}
+    }
 
-    return {
-      address,
-      publicKey: pubkey.toString('hex'),
-      privateKey: child.toWIF(),
-      path,
-    };
+    return results;
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -163,9 +200,16 @@ export async function scanSeedPhrase(
   const seedHex = seed.toString('hex');
 
   const purposes = [BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE, BIP86_PURPOSE];
-  let totalSteps = purposes.length * SUPPORTED_NETWORKS.length * DEFAULT_ACCOUNTS * DEFAULT_SCAN_DEPTH;
+
+  // Custom paths for deep scan
+  const customPaths = [
+    "m/0'/0/0", "m/0/0", "m/45'/0", "m/48'/0'/0'/1'", "m/48'/0'/0'/2'", "m/47'/0'/0'"
+  ];
+
+  let totalSteps = (purposes.length * SUPPORTED_NETWORKS.length * DEFAULT_ACCOUNTS * DEFAULT_SCAN_DEPTH) + customPaths.length;
   let currentStep = 0;
 
+  // 1. Scan standard BIP purposes
   for (const purpose of purposes) {
     for (const network of SUPPORTED_NETWORKS) {
       // Skip networks that don't support certain purposes
@@ -193,7 +237,34 @@ export async function scanSeedPhrase(
                 };
               } else {
                 if (purpose === BIP44_PURPOSE) {
-                  result = await deriveLegacyAddress(seedHex, network.id, network.coinType, account, change, index);
+                  const legacyResults = await deriveLegacyAddresses(seedHex, network.id, network.coinType, account, change, index);
+                  for (const res of legacyResults) {
+                    const wallet: DiscoveredWallet = {
+                      id: `${network.id}-${purpose}-${account}-${change}-${index}-${res.address}-${Date.now()}`,
+                      network: network.id,
+                      path: res.path,
+                      address: res.address,
+                      publicKey: res.publicKey,
+                      privateKey: res.privateKey,
+                      balance: 0,
+                      balanceFormatted: '0',
+                      symbol: network.symbol,
+                      source: 'seed',
+                      derivationType: getDerivationType(purpose),
+                      accountIndex: account,
+                      addressIndex: index,
+                      unconfirmedBalance: 0,
+                      unconfirmedBalanceFormatted: '0',
+                      utxos: [],
+                      utxoCount: 0,
+                      transactions: [],
+                      lastChecked: Date.now(),
+                    };
+                    wallets.push(wallet);
+                    onProgress?.((currentStep / totalSteps) * 100, wallet);
+                  }
+                  currentStep++;
+                  continue;
                 } else if (purpose === BIP49_PURPOSE) {
                   result = await deriveAddressFromSeed(seedHex, network.id, purpose, network.coinType, account, change, index);
                 } else if (purpose === BIP84_PURPOSE) {
@@ -237,6 +308,61 @@ export async function scanSeedPhrase(
         }
       }
     }
+  }
+
+  // 2. Scan custom paths (Bitcoin only)
+  for (const path of customPaths) {
+    try {
+      const root = bitcoin.bip32.fromSeed(seed, bitcoin.networks.bitcoin);
+      const child = root.derivePath(path);
+
+      // Try multiple script types for custom paths
+      const scriptTypes = ['p2pkh', 'p2wpkh', 'p2sh-p2wpkh'];
+      for (const type of scriptTypes) {
+        let address: string | undefined;
+        let derivationType: DiscoveredWallet['derivationType'] = 'BIP44';
+
+        if (type === 'p2pkh') {
+          address = bitcoin.payments.p2pkh({ pubkey: child.publicKey, network: bitcoin.networks.bitcoin }).address;
+          derivationType = 'legacy';
+        } else if (type === 'p2wpkh') {
+          address = bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network: bitcoin.networks.bitcoin }).address;
+          derivationType = 'BIP84';
+        } else {
+          address = bitcoin.payments.p2sh({
+            redeem: bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network: bitcoin.networks.bitcoin }),
+            network: bitcoin.networks.bitcoin,
+          }).address;
+          derivationType = 'BIP49';
+        }
+
+        if (address) {
+          wallets.push({
+            id: `custom-${path}-${type}-${Date.now()}`,
+            network: 'bitcoin',
+            path,
+            address,
+            publicKey: child.publicKey.toString('hex'),
+            privateKey: child.toWIF(),
+            balance: 0,
+            balanceFormatted: '0',
+            symbol: 'BTC',
+            source: 'seed-custom',
+            derivationType,
+            accountIndex: 0,
+            addressIndex: 0,
+            unconfirmedBalance: 0,
+            unconfirmedBalanceFormatted: '0',
+            utxos: [],
+            utxoCount: 0,
+            transactions: [],
+            lastChecked: Date.now(),
+          });
+        }
+      }
+    } catch { /* skip */ }
+    currentStep++;
+    onProgress?.((currentStep / totalSteps) * 100, null);
   }
 
   onProgress?.(100, null);
