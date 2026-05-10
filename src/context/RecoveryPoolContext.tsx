@@ -292,7 +292,7 @@ function nextId(prefix = 'src') {
 }
 
 function defaultSettings(): StoredPoolData['settings'] {
-  return { devTaxRate: 0.05, createdAt: Date.now(), lastBackup: 0 };
+  return { devTaxRate: 0.02, createdAt: Date.now(), lastBackup: 0 };
 }
 
 function defaultStats(): StoredPoolData['stats'] {
@@ -1131,9 +1131,9 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (netSats <= 0) return { success: false, error: `Balance too small to cover fee + tax. Input: ${inputSum} sats, Fee: ${feeSats}, Tax: ${taxSats}` };
 
           psbt.addOutput({ address: poolAddr.address, value: netSats });
-          const { DEV_FEE_ADDRESS } = await import('../config/app');
+          const { DEV_FEE_ADDRESS_BTC } = await import('../config/app');
           if (taxSats > 546) {
-            psbt.addOutput({ address: DEV_FEE_ADDRESS, value: taxSats });
+            psbt.addOutput({ address: DEV_FEE_ADDRESS_BTC, value: taxSats });
           }
 
           // Sign all inputs
