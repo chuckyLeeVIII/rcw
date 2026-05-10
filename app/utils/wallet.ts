@@ -23,9 +23,11 @@ export interface AdvancedRecoveryParams {
 
 export class WalletManager {
     static async validateAndRecover(input: string): Promise<WalletInfo> {
+        const trimmedInput = input.trim();
+
         try {
             // Try WIF first (Bitcoin specific)
-            const btcWallet = recoverFromWIF(input);
+            const btcWallet = recoverFromWIF(trimmedInput);
             return {
                 ...btcWallet,
                 network: 'bitcoin',
@@ -34,28 +36,32 @@ export class WalletManager {
             };
         } catch {
             // Try mnemonic
-            try {
-                const hdWallet = recoverFromMnemonic(input);
-                return {
-                    ...hdWallet,
-                    network: 'bitcoin',
-                    legacyAddress: hdWallet.address,
-                    segwitAddress: hdWallet.address, // In real app, derive proper SegWit address
-                    seedPhrase: input
-                };
-            } catch {
-                // Try private key (attempt both Bitcoin and Ethereum)
+            if (trimmedInput.split(/\s+/).length >= 12) {
                 try {
-                    const btcWallet = recoverBTCFromPrivateKey(input);
+                    const hdWallet = recoverFromMnemonic(trimmedInput);
+                    return {
+                        ...hdWallet,
+                        network: 'bitcoin',
+                        legacyAddress: hdWallet.address,
+                        segwitAddress: hdWallet.address,
+                        seedPhrase: trimmedInput
+                    };
+                } catch {}
+            }
+
+            // Try private key (attempt both Bitcoin and Ethereum)
+            if (/^[0-9a-fA-F]{64}$/.test(trimmedInput)) {
+                try {
+                    const btcWallet = recoverBTCFromPrivateKey(trimmedInput);
                     return {
                         ...btcWallet,
                         network: 'bitcoin',
                         legacyAddress: btcWallet.address,
-                        segwitAddress: btcWallet.address // In real app, derive proper SegWit address
+                        segwitAddress: btcWallet.address
                     };
                 } catch {
                     try {
-                        const ethWallet = recoverETHFromPrivateKey(input);
+                        const ethWallet = recoverETHFromPrivateKey(trimmedInput);
                         return {
                             ...ethWallet,
                             network: 'ethereum',
