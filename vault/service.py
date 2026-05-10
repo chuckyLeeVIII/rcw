@@ -7,10 +7,14 @@ import os
 import json
 import time
 import threading
+import hashlib
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
 
 
 @dataclass
@@ -18,6 +22,7 @@ class VaultEntry:
     """Encrypted vault entry"""
     id: str
     key_encrypted: str
+    nonce: str
     source: str
     metadata: Dict[str, Any]
     created_at: float
@@ -30,35 +35,53 @@ class Vault:
     Secure vault for storing private keys
     - Keys are never exposed raw to assistant/LLM
     - Only metadata (coin, address, balance) is exposed
-    - Encrypted at rest
+    - Encrypted at rest with AES-256-GCM
     """
     
     def __init__(
         self,
         vault_path: str = "vault.json",
-        encryption_key: Optional[bytes] = None,
+        password: Optional[str] = None,
     ):
         self.vault_path = Path(vault_path)
-        self.encryption_key = encryption_key or os.urandom(32)
+        self.password = password or "default-recovery-password" # Should be user-provided
         
         self._entries: Dict[str, VaultEntry] = {}
         self._lock = threading.Lock()
+        self._salt = None
+        self.aesgcm = None
         
-        # Load existing vault
+        # Load existing vault to get salt
         self._load()
+
+        if not self._salt:
+            self._salt = os.urandom(16)
+
+        self._derive_key()
+
+    def _derive_key(self):
+        """Derive encryption key from password and salt"""
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=self._salt,
+            iterations=100_000,
+        )
+        encryption_key = kdf.derive(self.password.encode())
+        self.aesgcm = AESGCM(encryption_key)
     
-    def _encrypt(self, plaintext: str) -> str:
-        """Simple XOR encryption (replace with proper AES in production)"""
-        # TODO: Use proper AES-256-GCM
-        key = self.encryption_key[:len(plaintext)]
-        encrypted = bytes(a ^ b for a, b in zip(plaintext.encode(), key))
-        return encrypted.hex()
+    def _encrypt(self, plaintext: str) -> (str, str):
+        """AES-256-GCM encryption"""
+        nonce = os.urandom(12)
+        ciphertext = self.aesgcm.encrypt(nonce, plaintext.encode(), None)
+        return ciphertext.hex(), nonce.hex()
     
-    def _decrypt(self, ciphertext: str) -> str:
-        """Decrypt (replace with proper AES in production)"""
-        key = self.encryption_key[:len(ciphertext)//2]
-        decrypted = bytes(a ^ b for a, b in zip(bytes.fromhex(ciphertext), key))
-        return decrypted.decode()
+    def _decrypt(self, ciphertext_hex: str, nonce_hex: str) -> str:
+        """AES-256-GCM decryption"""
+        ciphertext = bytes.fromhex(ciphertext_hex)
+        nonce = bytes.fromhex(nonce_hex)
+        plaintext = self.aesgcm.decrypt(nonce, ciphertext, None)
+        return plaintext.decode()
     
     def _load(self):
         """Load vault from disk"""
@@ -67,6 +90,8 @@ class Vault:
                 with open(self.vault_path, 'r') as f:
                     data = json.load(f)
                 
+                self._salt = bytes.fromhex(data.get('salt')) if data.get('salt') else None
+
                 for entry_id, entry_data in data.get('entries', {}).items():
                     self._entries[entry_id] = VaultEntry(**entry_data)
             except Exception as e:
@@ -76,7 +101,8 @@ class Vault:
         """Save vault to disk"""
         with self._lock:
             data = {
-                'version': 1,
+                'version': 2, # Version 2 for AES-GCM
+                'salt': self._salt.hex() if self._salt else None,
                 'entries': {
                     k: asdict(v) for k, v in self._entries.items()
                 },
@@ -103,10 +129,12 @@ class Vault:
         import uuid
         
         entry_id = str(uuid.uuid4())
+        encrypted_val, nonce = self._encrypt(key)
         
         entry = VaultEntry(
             id=entry_id,
-            key_encrypted=self._encrypt(key),
+            key_encrypted=encrypted_val,
+            nonce=nonce,
             source=source,
             metadata=metadata,
             created_at=time.time(),
@@ -132,7 +160,7 @@ class Vault:
             entry.access_count += 1
         
         self._save()
-        return self._decrypt(entry.key_encrypted)
+        return self._decrypt(entry.key_encrypted, entry.nonce)
     
     def get_metadata(self, entry_id: str) -> Optional[Dict]:
         """Get metadata without exposing key"""
