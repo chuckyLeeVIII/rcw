@@ -174,6 +174,7 @@ class KeyReducerAgent:
                 if btc:
                     addresses['btc'] = btc['btc_p2wpkh']
                     addresses['btc_p2pkh'] = btc['btc_p2pkh']
+                    addresses['btc_p2pkh_uncompressed'] = btc.get('btc_p2pkh_uncompressed')
                     addresses['btc_p2sh'] = btc['btc_p2sh_p2wpkh']
             except Exception: pass
 

@@ -231,6 +231,8 @@ class MultimodalOrchestrator:
             'total_value_usd': 0.0,
             'start_time': 0.0,
         }
+        self.discovered_hits = []
+        self._hits_lock = threading.Lock()
 
     def _get_live_prices(self) -> Dict[str, float]:
         """Fetch live crypto prices with a 5-minute cache and fallback logic"""
@@ -456,21 +458,28 @@ class MultimodalOrchestrator:
             for t_sym, t_amount in all_tokens[chain].items():
                 total_usd += t_amount * (18.0 if t_sym == "LINK" else 1.0)
 
+        event_data = {
+            'artifact_type': hit.artifact_type,
+            'path': hit.path,
+            'addresses': hit.addresses,
+            'balances': balances,
+            'history': tx_counts,
+            'rewards': all_rewards,
+            'tokens': all_tokens,
+            'total_usd': total_usd,
+            'metadata': hit.metadata,
+            'timestamp': hit.timestamp.isoformat(),
+        }
+
+        with self._hits_lock:
+            self.discovered_hits.append(event_data)
+            if len(self.discovered_hits) > 1000:
+                self.discovered_hits.pop(0)
+
         event = OrchestratorEvent(
             event_type="computer_scan:found",
             source="computer_scanner",
-            data={
-                'artifact_type': hit.artifact_type,
-                'path': hit.path,
-                'addresses': hit.addresses,
-                'balances': balances,
-                'history': tx_counts,
-                'rewards': all_rewards,
-                'tokens': all_tokens,
-                'total_usd': total_usd,
-                'metadata': hit.metadata,
-                'timestamp': hit.timestamp.isoformat(),
-            },
+            data=event_data,
             timestamp=datetime.now(timezone.utc),
         )
         self._event_queue.put_nowait(event)
