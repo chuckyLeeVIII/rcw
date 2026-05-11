@@ -126,7 +126,7 @@ def run_btcrecover_scan(
     targets = set(target_addresses or [])
     results = {"found": False, "attempts": 0, "matches": []}
 
-    if not targets and not exhaustive:
+    if not targets:
         return results
 
     # Determine candidate source
