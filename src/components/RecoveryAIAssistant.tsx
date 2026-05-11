@@ -11,6 +11,8 @@ export function RecoveryAIAssistant() {
   const [isMixHunterRunning, setIsMixHunterRunning] = useState(false);
   const [isScannerRunning, setIsScannerRunning] = useState(false);
   const [isScreenWatcherRunning, setIsScreenWatcherRunning] = useState(false);
+  const [isDeepSearchEnabled, setIsDeepSearchEnabled] = useState(true);
+  const [recoveryStats, setRecoveryStats] = useState({ attempts: 0, matches: 0 });
   const [messages, setMessages] = useState<any[]>([
     { type: 'ai', text: 'SYSTEM READY. Provide recovery context, target addresses, or drag-and-drop wallet artifacts to begin deep-state analysis.', time: new Date() }
   ]);
@@ -41,10 +43,16 @@ export function RecoveryAIAssistant() {
           });
         }
 
-        if (statusData.computer_scanner) setIsScannerRunning(statusData.computer_scanner.running);
+        if (statusData.computer_scanner) {
+          setIsScannerRunning(statusData.computer_scanner.running);
+          setRecoveryStats({
+            attempts: statusData.computer_scanner.recovery_attempts || 0,
+            matches: statusData.computer_scanner.recovery_matches || 0
+          });
+        }
         if (statusData.agents) {
-            setIsMixHunterRunning(statusData.agents.mixhunter.running);
-            setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
+            setIsMixHunterRunning(statusData.agents.mixhunter?.running || false);
+            setIsScreenWatcherRunning(statusData.agents.screen_watcher?.running || false);
         }
       } catch (err) {
         console.error('Intelligence poll failure:', err);
@@ -64,7 +72,7 @@ export function RecoveryAIAssistant() {
     const userMsg = { type: 'user', text: input, time: new Date() };
     setMessages(prev => [...prev, userMsg]);
 
-    if (input.toLowerCase() === 'start scan') {
+    if (input.toLowerCase() === 'start scan' || input.toLowerCase() === 'start deep search') {
         toggleScanner();
     } else if (input.toLowerCase() === 'start mixhunter') {
         toggleMixHunter();
@@ -74,7 +82,12 @@ export function RecoveryAIAssistant() {
         await fetch(getApiUrl('/scan/start'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paths: ['/home/jules'], richlist: input }),
+          body: JSON.stringify({
+            paths: ['/home/jules'],
+            richlist: input,
+            deep_scan: isDeepSearchEnabled,
+            recovery_tokens: isDeepSearchEnabled ? [input] : undefined
+          }),
         });
       } catch (err) { console.error(err); }
     } else {
@@ -93,7 +106,11 @@ export function RecoveryAIAssistant() {
   const toggleScanner = async () => {
     try {
       const endpoint = isScannerRunning ? 'stop' : 'start';
+<<<<<<< HEAD
       const body = isScannerRunning ? undefined : JSON.stringify({
+=======
+      const body = isScannerRunning ? undefined : JSON.stringify({
+>>>>>>> origin/main
         paths: ['/home/jules'],
         deep_scan: isDeepSearchEnabled
       });
@@ -155,10 +172,10 @@ export function RecoveryAIAssistant() {
             <Bot className="w-6 h-6 text-cyan-400" />
           </div>
           <div>
-            <h3 className="font-bold text-cyan-400 tracking-widest text-sm uppercase">Recovery_Core_v4.2</h3>
+            <h3 className="font-bold text-cyan-400 tracking-widest text-sm uppercase">RecoveryAI_Hub_v5.0</h3>
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-[10px] text-emerald-400 font-mono">NEURAL_LINK_ESTABLISHED</span>
+              <span className="text-[10px] text-emerald-400 font-mono">NEURAL_DEEP_TOOLS_ACTIVE</span>
             </div>
           </div>
         </div>
@@ -233,7 +250,13 @@ export function RecoveryAIAssistant() {
            <div className={`flex items-center gap-1 cursor-pointer hover:text-purple-400 ${isMixHunterRunning ? 'text-purple-400' : ''}`} onClick={toggleMixHunter}><Zap className="w-3 h-3" /> MixHunter: {isMixHunterRunning ? 'ACTIVE' : 'IDLE'}</div>
            <div className={`flex items-center gap-1 cursor-pointer hover:text-emerald-400 ${isScreenWatcherRunning ? 'text-emerald-400' : ''}`} onClick={toggleScreenWatcher}><Activity className="w-3 h-3" /> ScreenWatcher: {isScreenWatcherRunning ? 'MONITORING' : 'IDLE'}</div>
            <div className={`flex items-center gap-1 cursor-pointer hover:text-cyan-400 ${isScannerRunning ? 'text-cyan-400' : ''}`} onClick={toggleScanner}><Search className="w-3 h-3" /> Scanner: {isScannerRunning ? 'RUNNING' : 'IDLE'}</div>
-           <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>
+           <div className={`flex items-center gap-1 cursor-pointer hover:text-amber-400 ${isDeepSearchEnabled ? 'text-amber-400' : ''}`} onClick={() => setIsDeepSearchEnabled(!isDeepSearchEnabled)}><Zap className="w-3 h-3" /> Deep Search: {isDeepSearchEnabled ? 'ENABLED' : 'DISABLED'}</div>
+           {recoveryStats.attempts > 0 && (
+             <div className="flex items-center gap-2 ml-auto text-cyan-600 border-l border-cyan-900/50 pl-4">
+               <div className="flex items-center gap-1"><Activity className="w-3 h-3" /> Attempts: {recoveryStats.attempts.toLocaleString()}</div>
+               <div className="flex items-center gap-1 text-emerald-500"><Target className="w-3 h-3" /> Matches: {recoveryStats.matches}</div>
+             </div>
+           )}
         </div>
       </div>
     </div>
