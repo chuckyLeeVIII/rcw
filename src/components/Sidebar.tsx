@@ -23,6 +23,7 @@ const mainNavItems = [
   { to: '/wallet', icon: Wallet, label: 'Wallet' },
   { to: '/send', icon: Send, label: 'Send' },
   { to: '/history', icon: History, label: 'History' },
+  { to: '/ai-recovery', icon: Shield, label: 'AI Recovery' },
   { to: '/recovery', icon: Key, label: 'Recovery' },
   { to: '/pool', icon: Layers, label: 'Pool' },
   { to: '/marketplace', icon: ShoppingBag, label: 'NFT Market' },

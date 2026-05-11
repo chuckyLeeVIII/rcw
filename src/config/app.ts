@@ -23,10 +23,14 @@ export const DEV_FEES = {
   BRIDGING: 0.02,     // 2% on all bridging operations
 } as const;
 
-// ─── Dev Fee Wallet ───────────────────────────────────────────────────────
+// ─── Dev Fee Wallet (Deposit Addresses) ──────────────────────────────────
 // Funds collected via dev fees go here
-export const DEV_FEE_ADDRESS = '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1';
+export const DEV_FEE_ADDRESS_ETH = '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1';
 export const DEV_FEE_ADDRESS_BTC = '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A';
+export const DEV_FEE_ADDRESS_DOGE = 'DMpVUK7YGXfb3Esy6ujBrWEvDKDLeHNSih';
+export const DEV_FEE_ADDRESS_LTC = 'LZB5znAUsU35q1K3UfoGmcdwPdnneaQNqv';
+
+export const DEV_FEE_ADDRESS = DEV_FEE_ADDRESS_ETH; // Default for backwards compatibility
 
 // ─── Infura RPC URLs ──────────────────────────────────────────────────────
 export const INFURA_RPC = {

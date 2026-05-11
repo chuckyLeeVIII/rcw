@@ -27,7 +27,7 @@ from bip_utils import (
 # Multi-chain support via blockthon (if available)
 try:
     import sys
-    sys.path.insert(0, '/run/media/chucky/onn. Disk/v4.3.6')
+    # sys.path.insert(0, '/run/media/chucky/onn. Disk/v4.3.6')
     from blockthon.Utils import PrivateKey_To_Addr as btc_addr
     from blockthon.Ethereum import PrivateKey_To_ETH as eth_addr
     from blockthon.Litecoin import PrivateKey_To_LTC as ltc_addr
@@ -107,6 +107,7 @@ class KeyReducerAgent:
         self.watch_files = watch_files or []
         
         self._running = False
+        self.is_running = False # Alias for status consistency
         self._input_queue: queue.Queue = queue.Queue(maxsize=10000)
         self._output_queue: queue.Queue = queue.Queue(maxsize=1000)
         self._seen_values: set = set()
@@ -353,6 +354,7 @@ class KeyReducerAgent:
         """Start the key reducer"""
         if self._running: return
         self._running = True
+        self.is_running = True
         for i in range(num_workers):
             t = threading.Thread(target=self._worker, args=(i,), daemon=True)
             t.start()
@@ -366,6 +368,7 @@ class KeyReducerAgent:
     def stop(self):
         """Stop the key reducer"""
         self._running = False
+        self.is_running = False
         for t in self._threads: t.join(timeout=2)
         self._threads.clear()
         print("[KeyReducer] Stopped")

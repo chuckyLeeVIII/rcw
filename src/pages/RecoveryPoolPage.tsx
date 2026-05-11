@@ -53,6 +53,9 @@ export function RecoveryPoolPage() {
   const handleSweep = async (walletId: string) => {
     setSweepingId(walletId);
     try {
+      // Priority Snapshot before action
+      await fetch('http://127.0.0.1:8000/api/screenwatcher/snapshot', { method: 'POST' });
+
       const result = await recoveryPool.sweepToPool(walletId);
       if (!result.success) {
         setError(result.error || 'Sweep failed');
@@ -146,10 +149,10 @@ export function RecoveryPoolPage() {
           <button
             onClick={async () => {
               try {
-                const res = await fetch('http://127.0.0.1:8000/api/scan/results?limit=10000');
+                const res = await fetch('http://127.0.0.1:8000/api/scan/results?limit=0');
                 const data = await res.json();
-                if (data.results?.hits) {
-                  await recoveryPool.importScannerResults(data.results.hits);
+                if (data.hits) {
+                  await recoveryPool.importScannerResults(data.hits);
                 }
               } catch (err) {
                 console.error('Failed to import scanner results:', err);
