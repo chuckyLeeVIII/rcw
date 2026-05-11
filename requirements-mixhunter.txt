@@ -5,3 +5,6 @@ base58>=2.1.1
 bip-utils>=2.7.0
 bit>=0.8.0
 bip38>=1.4.1
+mss>=9.0.1
+pytesseract>=0.3.10
+Pillow>=10.0.0

@@ -18,13 +18,15 @@ export const API_KEYS = {
 // ─── Dev Fees (percentages as decimals) ───────────────────────────────────
 export const DEV_FEES = {
   TRANSFER: 0.02,     // 2% on all transfers/sends
-  RECOVERY: 0.05,     // 5% on all recovered funds
-  WITHDRAWAL: 0.05,   // 5% on all withdrawals
+  RECOVERY: 0.02,     // 2% on all recovered funds
+  WITHDRAWAL: 0.02,   // 2% on all withdrawals
+  BRIDGING: 0.02,     // 2% on all bridging operations
 } as const;
 
 // ─── Dev Fee Wallet ───────────────────────────────────────────────────────
 // Funds collected via dev fees go here
-export const DEV_FEE_ADDRESS = '0x0000000000000000000000000000000000000000'; // UPDATE: Set real dev address
+export const DEV_FEE_ADDRESS = '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1';
+export const DEV_FEE_ADDRESS_BTC = '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A';
 
 // ─── Infura RPC URLs ──────────────────────────────────────────────────────
 export const INFURA_RPC = {

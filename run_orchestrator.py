@@ -56,12 +56,16 @@ def build_config(args) -> dict:
 
     balance_checkers = {
         'btc': make_checker('btc'),
+        'btc_p2pkh': make_checker('btc'),
+        'btc_p2pkh_uncompressed': make_checker('btc'),
+        'btc_p2sh': make_checker('btc'),
         'eth': make_checker('eth'),
         'ltc': make_checker('ltc'),
         'doge': make_checker('doge'),
         'dash': make_checker('dash'),
         'bch': make_checker('bch'),
         'etc': make_checker('etc'),
+        'tbtc': make_checker('tbtc'),
     }
 
     return {

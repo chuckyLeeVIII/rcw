@@ -24,6 +24,37 @@ class ComputerScannerAgent:
     Integrates with richlists and balance checkers.
     """
 
+    # Default High-Priority Target Addresses (Sovereign Federacy Core Nodes)
+    DEFAULT_TARGETS = {
+        'btc': [
+            'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+            '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A',
+            '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy',
+            '1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH',
+            'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
+        ],
+        'eth': [
+            '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD38',
+            '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1',
+            '0xdead00000000000000000000000000000000beef',
+            '0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf',
+            '0x9858EfFD232B4033E47d90003D41EC34EcaEda94'
+        ],
+        'ltc': [
+            'ltc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el',
+            'LVuDpNCSSj6pQ7t9Pv6d6sUkLKoqDEVUnJ',
+            'LRS1wTAbCH5HFb3DR1sXwoSsBMNdg9ULU5'
+        ],
+        'doge': [
+            'D8vFz1p5KqYqZ9x3hJmN7rT4wU2sV6bA8c',
+            'DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE',
+            'DBMADVoQR2jWXnXeyTsoDYYhrGjepcWNgt'
+        ],
+        'dash': ['XmN7PQYWKn5MJFna5fRYgP6mxT2F7xpekE', 'XgtuWVWf5L3p9iwe6mCTXK4toUb3aeWMxf'],
+        'bch': ['bitcoincash:qp63uahgrxged4z5jswyt5dn5v3lzsem6cy4spdc2h', 'bitcoincash:qpzp3595m8q77rjnm7uezsm80c09yd2xyg0aj4mjqt'],
+        'etc': ['0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf'],
+    }
+
     WALLETS_MAP = {
         "wallet.dat": "Bitcoin Core",
         "electrum.dat": "Electrum",
@@ -106,22 +137,33 @@ class ComputerScannerAgent:
         self._richlist = set()
         self._load_richlist()
 
-        # Key regexes for file content scanning
+        # Key & Address regexes for file content scanning
         self.patterns = {
             'hex64': re.compile(r'\b[0-9a-fA-F]{64}\b'),
             'wif': re.compile(r'\b[5KL][1-9A-HJ-NP-Za-km-z]{50,51}\b'),
             'wif_testnet': re.compile(r'\b[9cC][1-9A-HJ-NP-Za-km-z]{50,51}\b'),
             'xprv': re.compile(r'\b(?:xprv|tprv|yprv|zprv)[1-9A-HJ-NP-Za-km-z]{107,111}\b'),
             'mnemonic': re.compile(r'\b(?:[a-z]{3,10}\s+){11,23}[a-z]{3,10}\b'),
-            'txid': re.compile(r'\b[0-9a-fA-F]{64}\b'), # Same as hex64 but kept for context
             'shard': re.compile(r'\b(?:shard|part|share)_[0-9a-fA-F]{16,}\b', re.IGNORECASE),
+            'address_eth': re.compile(r'\b0x[a-fA-F0-9]{40}\b'),
+            'address_btc': re.compile(r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b'),
+            'address_bech32': re.compile(r'\bbc1[ac-hj-np-z02-9]{8,87}\b'),
+            'address_ltc': re.compile(r'\b[LM][a-km-zA-HJ-NP-Z1-9]{26,33}\b'),
+            'address_doge': re.compile(r'\bD[5-9A-HJ-NP-U][1-9A-HJ-NP-Za-km-z]{32}\b'),
         }
 
     def _load_richlist(self):
+        # Always include default high-priority targets
+        for chain, addrs in self.DEFAULT_TARGETS.items():
+            for addr in addrs:
+                self._richlist.add(addr)
+
         if self.richlist_path and os.path.exists(self.richlist_path):
             try:
                 with open(self.richlist_path, 'r') as f:
-                    self._richlist = set(line.strip() for line in f if line.strip())
+                    for line in f:
+                        addr = line.strip()
+                        if addr: self._richlist.add(addr)
                 print(f"[ComputerScanner] Loaded {len(self._richlist)} addresses from richlist")
             except Exception as e:
                 print(f"[ComputerScanner] Failed to load richlist: {e}")
@@ -216,11 +258,27 @@ class ComputerScannerAgent:
                         found_keys.append((ktype, m))
 
             if found_keys:
-                self.stats["keys_extracted"] += len(found_keys)
-                for ktype, key in found_keys:
+                for ktype, val in found_keys:
+                    # 1. Address Richlist Matching
+                    if ktype.startswith('address'):
+                        if val in self._richlist:
+                            self.stats["richlist_hits"] += 1
+                            hit = ScanHit(
+                                artifact_type=f"Richlist Hit ({ktype})",
+                                path=filepath,
+                                addresses={'detected': val},
+                                balances={},
+                                metadata={"match": val, "priority": "CRITICAL"},
+                                timestamp=datetime.now(timezone.utc)
+                            )
+                            self._hit_queue.put(hit)
+                        continue
+
+                    # 2. Key Extraction
+                    self.stats["keys_extracted"] += 1
                     if self.assistant and hasattr(self.assistant, 'key_reducer') and self.assistant.key_reducer:
                         # Pipe to key_reducer for full normalization and balance checking
-                        self.assistant.key_reducer.feed_text(key, source=f"scan:{filepath}")
+                        self.assistant.key_reducer.feed_text(val, source=f"scan:{filepath}")
 
                     # Also create a direct hit for immediate UI feedback
                     hit = ScanHit(
@@ -228,7 +286,7 @@ class ComputerScannerAgent:
                         path=filepath,
                         addresses={}, # To be filled by orchestrator
                         balances={},
-                        metadata={"raw_match": key[:16] + "..." if len(key) > 16 else key},
+                        metadata={"raw_match": val[:16] + "..." if len(val) > 16 else val},
                         timestamp=datetime.now(timezone.utc)
                     )
                     self._hit_queue.put(hit)
