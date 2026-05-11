@@ -18,7 +18,7 @@ import signal
 import threading
 from pathlib import Path
 
-from multimodal_orchestrator import MultimodalOrchestrator
+from multimodal_orchestrator import MultimodalOrchestrator, quick_check_balance
 from vault.service import Vault
 
 
@@ -49,6 +49,25 @@ def parse_args():
 
 def build_config(args) -> dict:
     """Build config from CLI args"""
+
+    # Define balance checkers using MultimodalOrchestrator's quick_check_balance
+    def make_checker(coin):
+        return lambda addr: quick_check_balance(addr, coin).get('balance', 0.0)
+
+    balance_checkers = {
+        'btc': make_checker('btc'),
+        'btc_p2pkh': make_checker('btc'),
+        'btc_p2pkh_uncompressed': make_checker('btc'),
+        'btc_p2sh': make_checker('btc'),
+        'eth': make_checker('eth'),
+        'ltc': make_checker('ltc'),
+        'doge': make_checker('doge'),
+        'dash': make_checker('dash'),
+        'bch': make_checker('bch'),
+        'etc': make_checker('etc'),
+        'tbtc': make_checker('tbtc'),
+    }
+
     return {
         'key_reducer': {
             'watch_files': args.watch_files or [],
@@ -59,7 +78,7 @@ def build_config(args) -> dict:
             'richlist_path': args.richlist,
             'tokenlist_path': args.tokenlist,
         },
-        'balance_checkers': {},  # TODO: Add balance checkers
+        'balance_checkers': balance_checkers,
     }
 
 

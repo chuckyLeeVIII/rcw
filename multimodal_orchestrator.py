@@ -22,6 +22,8 @@ import time
 
 from guardian.subagents.key_reducer import KeyReducerAgent, KeyFound
 from guardian.subagents.computer_scanner import ComputerScannerAgent, ScanHit
+from guardian.subagents.screen_watcher import ScreenWatcherAgent
+from guardian.subagents.mixhunter import MixHunterEngine
 from vault.service import Vault
 
 # Common high-value ERC20 tokens for discovery enrichment
@@ -77,9 +79,12 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
     try:
         chain_lower = chain.lower()
         # Support for 8 chains (BTC, tBTC, LTC, DOGE, DASH, ETH, ETC, BCH)
-        if chain_lower in ("btc", "bitcoin", "tbtc", "ltc", "doge", "dash", "bch", "bitcoin-cash"):
-            if chain_lower in ("btc", "bitcoin"):
-                url = f"https://blockstream.info/api/address/{address}"
+        if any(c in chain_lower for c in ("btc", "bitcoin", "tbtc", "ltc", "doge", "dash", "bch", "etc")):
+            if "btc" in chain_lower or "bitcoin" in chain_lower:
+                if "tbtc" in chain_lower:
+                    url = f"https://blockstream.info/testnet/api/address/{address}"
+                else:
+                    url = f"https://blockstream.info/api/address/{address}"
             elif chain_lower == "tbtc":
                 url = f"https://blockstream.info/testnet/api/address/{address}"
             else:
@@ -211,6 +216,8 @@ class MultimodalOrchestrator:
         # Sub-agents
         self.key_reducer: Optional[KeyReducerAgent] = None
         self.computer_scanner: Optional[ComputerScannerAgent] = None
+        self.screen_watcher: Optional[ScreenWatcherAgent] = None
+        self.mixhunter: Optional[MixHunterEngine] = None
         
         # State
         self._running = False
@@ -227,6 +234,8 @@ class MultimodalOrchestrator:
             'total_value_usd': 0.0,
             'start_time': 0.0,
         }
+        self.discovered_hits = []
+        self._hits_lock = threading.Lock()
 
     def _get_live_prices(self) -> Dict[str, float]:
         """Fetch live crypto prices with a 5-minute cache and fallback logic"""
@@ -325,6 +334,8 @@ class MultimodalOrchestrator:
         # Setup sub-agents
         self._setup_key_reducer()
         self._setup_computer_scanner()
+        self.screen_watcher = ScreenWatcherAgent(assistant=self)
+        self.mixhunter = MixHunterEngine(assistant=self)
         
         self._running = True
         self._stats['start_time'] = time.time()
@@ -337,6 +348,14 @@ class MultimodalOrchestrator:
             t = threading.Thread(target=self._consume_key_reducer_hits, daemon=True)
             t.start()
             self._threads.append(t)
+
+        # Start ScreenWatcher
+        if self.screen_watcher:
+            self.screen_watcher.start()
+
+        # Start MixHunter (optional based on config)
+        if self.config.get('mixhunter', {}).get('enabled', False):
+            self.mixhunter.start(num_workers=self.config['mixhunter'].get('workers', 2))
         
         # Start ComputerScanner (idle until explicitly started via API/CLI)
         if self.computer_scanner:
@@ -362,6 +381,12 @@ class MultimodalOrchestrator:
         
         if self.computer_scanner:
             self.computer_scanner.stop()
+
+        if self.screen_watcher:
+            self.screen_watcher.stop()
+
+        if self.mixhunter:
+            self.mixhunter.stop()
         
         for t in self._threads:
             t.join(timeout=2)
@@ -378,17 +403,24 @@ class MultimodalOrchestrator:
             if not self._running:
                 break
             
+            event_data = {
+                'key_type': key_found.key_type,
+                'addresses': key_found.addresses,
+                'balances': key_found.balances,
+                'total_usd': key_found.total_usd,
+                'source': key_found.source,
+                'timestamp': key_found.timestamp.isoformat(),
+            }
+
+            with self._hits_lock:
+                self.discovered_hits.append(event_data)
+                if len(self.discovered_hits) > 1000:
+                    self.discovered_hits.pop(0)
+
             event = OrchestratorEvent(
                 event_type="key_reducer:found",
                 source="key_reducer",
-                data={
-                    'key_type': key_found.key_type,
-                    'addresses': key_found.addresses,
-                    'balances': key_found.balances,
-                    'total_usd': key_found.total_usd,
-                    'source': key_found.source,
-                    'timestamp': key_found.timestamp.isoformat(),
-                },
+                data=event_data,
                 timestamp=datetime.now(timezone.utc),
             )
             
@@ -436,21 +468,28 @@ class MultimodalOrchestrator:
             for t_sym, t_amount in all_tokens[chain].items():
                 total_usd += t_amount * (18.0 if t_sym == "LINK" else 1.0)
 
+        event_data = {
+            'artifact_type': hit.artifact_type,
+            'path': hit.path,
+            'addresses': hit.addresses,
+            'balances': balances,
+            'history': tx_counts,
+            'rewards': all_rewards,
+            'tokens': all_tokens,
+            'total_usd': total_usd,
+            'metadata': hit.metadata,
+            'timestamp': hit.timestamp.isoformat(),
+        }
+
+        with self._hits_lock:
+            self.discovered_hits.append(event_data)
+            if len(self.discovered_hits) > 1000:
+                self.discovered_hits.pop(0)
+
         event = OrchestratorEvent(
             event_type="computer_scan:found",
             source="computer_scanner",
-            data={
-                'artifact_type': hit.artifact_type,
-                'path': hit.path,
-                'addresses': hit.addresses,
-                'balances': balances,
-                'history': tx_counts,
-                'rewards': all_rewards,
-                'tokens': all_tokens,
-                'total_usd': total_usd,
-                'metadata': hit.metadata,
-                'timestamp': hit.timestamp.isoformat(),
-            },
+            data=event_data,
             timestamp=datetime.now(timezone.utc),
         )
         self._event_queue.put_nowait(event)

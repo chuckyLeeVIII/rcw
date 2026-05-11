@@ -15,6 +15,7 @@ import { RecoveryPoolPage } from './pages/RecoveryPoolPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { MasterLedgerPage } from './pages/MasterLedgerPage';
 import { ComputerScanPage } from './pages/ComputerScanPage';
+import { AIRecoveryPage } from './pages/AIRecoveryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { HelpPage } from './pages/HelpPage';
@@ -38,6 +39,7 @@ function App() {
                     <Route path="marketplace" element={<MarketplacePage />} />
                     <Route path="ledger" element={<MasterLedgerPage />} />
                     <Route path="scan" element={<ComputerScanPage />} />
+                    <Route path="ai-recovery" element={<AIRecoveryPage />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="security" element={<SecurityPage />} />
                     <Route path="help" element={<HelpPage />} />

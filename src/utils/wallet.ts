@@ -56,7 +56,7 @@ export class WalletManager {
       }
 
       // WIF
-      if (/^[KL5][1-9A-HJ-NP-Za-km-z]{51}$/.test(trimmed)) {
+      if (/^[KL5][1-9A-HJ-NP-Za-km-z]{50,51}$/.test(trimmed)) {
         const keyPair = ECPair.fromWIF(trimmed);
         const btcAddr = bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey }).address;
         const legacyAddr = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey }).address;

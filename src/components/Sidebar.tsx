@@ -19,6 +19,7 @@ import {
 
 const mainNavItems = [
   { to: '/', icon: Home, label: 'Dashboard' },
+  { to: '/ai-recovery', icon: Shield, label: 'AI Recovery' },
   { to: '/wallet', icon: Wallet, label: 'Wallet' },
   { to: '/send', icon: Send, label: 'Send' },
   { to: '/history', icon: History, label: 'History' },
