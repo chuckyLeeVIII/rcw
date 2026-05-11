@@ -546,6 +546,11 @@ class MultimodalOrchestrator:
             'running': self._running,
             'stats': self._stats.copy(),
             'vault_stats': self.vault.get_stats(),
+            'agents': {
+                'key_reducer': {'running': self.key_reducer.is_running if self.key_reducer else False},
+                'screen_watcher': {'running': self.screen_watcher._running if self.screen_watcher else False},
+                'mixhunter': {'running': self.mixhunter._running if self.mixhunter else False},
+            }
         }
         
         if self.computer_scanner:

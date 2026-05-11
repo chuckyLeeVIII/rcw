@@ -7,6 +7,9 @@ export function RecoveryAIAssistant() {
   const recoveryPool = useRecoveryPool();
   const [chatInput, setChatInput] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
+  const [isMixHunterRunning, setIsMixHunterRunning] = useState(false);
+  const [isScannerRunning, setIsScannerRunning] = useState(false);
+  const [isScreenWatcherRunning, setIsScreenWatcherRunning] = useState(false);
   const [messages, setMessages] = useState<any[]>([
     { type: 'ai', text: 'SYSTEM READY. Provide recovery context, target addresses, or drag-and-drop wallet artifacts to begin deep-state analysis.', time: new Date() }
   ]);
@@ -16,21 +19,31 @@ export function RecoveryAIAssistant() {
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/scan/results?limit=5');
-        const data = await res.json();
-        if (data.hits && data.hits.length > 0) {
-          data.hits.forEach((hit: any) => {
+        const [hitsRes, statusRes] = await Promise.all([
+          fetch('http://127.0.0.1:8000/api/scan/results?limit=5'),
+          fetch('http://127.0.0.1:8000/api/status')
+        ]);
+        const hitsData = await hitsRes.json();
+        const statusData = await statusRes.json();
+
+        if (hitsData.hits && hitsData.hits.length > 0) {
+          hitsData.hits.forEach((hit: any) => {
             const hitMsg = {
               type: 'hit',
               text: `ARTIFACT_DISCOVERED: ${hit.artifact_type} in ${hit.path || 'STREAM'} - VALUE: $${(hit.total_usd || 0).toFixed(2)}`,
               time: new Date(hit.timestamp || Date.now())
             };
-            // Add if not already present (simple dedupe for UI)
             setMessages(prev => {
               if (prev.some(m => m.text === hitMsg.text)) return prev;
               return [...prev, hitMsg];
             });
           });
+        }
+
+        if (statusData.computer_scanner) setIsScannerRunning(statusData.computer_scanner.running);
+        if (statusData.agents) {
+            setIsMixHunterRunning(statusData.agents.mixhunter.running);
+            setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
         }
       } catch (err) {
         console.error('Intelligence poll failure:', err);
@@ -44,19 +57,23 @@ export function RecoveryAIAssistant() {
   }, [messages]);
 
   const handleSend = async () => {
-    if (!chatInput.trim()) return;
+    const input = chatInput.trim();
+    if (!input) return;
 
-    const userMsg = { type: 'user', text: chatInput, time: new Date() };
+    const userMsg = { type: 'user', text: input, time: new Date() };
     setMessages(prev => [...prev, userMsg]);
 
-    // Check if input is an address (target)
-    if (/^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})$/.test(chatInput.trim())) {
-      setMessages(prev => [...prev, { type: 'ai', text: `TARGET_LOCK_ACQUIRED: Initiating priority scan for ${chatInput.trim()}...`, time: new Date() }]);
+    if (input.toLowerCase() === 'start scan') {
+        toggleScanner();
+    } else if (input.toLowerCase() === 'start mixhunter') {
+        toggleMixHunter();
+    } else if (/^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})$/.test(input)) {
+      setMessages(prev => [...prev, { type: 'ai', text: `TARGET_LOCK_ACQUIRED: Initiating priority scan for ${input}...`, time: new Date() }]);
       try {
         await fetch('http://127.0.0.1:8000/api/scan/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paths: ['/home/jules'], richlist: chatInput.trim() }),
+          body: JSON.stringify({ paths: ['/home/jules'], richlist: input }),
         });
       } catch (err) { console.error(err); }
     } else {
@@ -70,6 +87,38 @@ export function RecoveryAIAssistant() {
     }
 
     setChatInput('');
+  };
+
+  const toggleScanner = async () => {
+    try {
+      const endpoint = isScannerRunning ? 'stop' : 'start';
+      const body = isScannerRunning ? undefined : JSON.stringify({ paths: ['/home/jules'] });
+      const res = await fetch(`http://127.0.0.1:8000/api/scan/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { type: 'ai', text: `SCANNER_CMD: ${data.status?.toUpperCase() || 'ERROR'}`, time: new Date() }]);
+    } catch (err) { console.error(err); }
+  };
+
+  const toggleMixHunter = async () => {
+    try {
+      const endpoint = isMixHunterRunning ? 'stop' : 'start';
+      const res = await fetch(`http://127.0.0.1:8000/api/mixhunter/${endpoint}`, { method: 'POST' });
+      const data = await res.json();
+      setMessages(prev => [...prev, { type: 'ai', text: `MIXHUNTER_CMD: ${data.status?.toUpperCase() || 'ERROR'}`, time: new Date() }]);
+    } catch (err) { console.error(err); }
+  };
+
+  const toggleScreenWatcher = async () => {
+    try {
+      const endpoint = isScreenWatcherRunning ? 'stop' : 'start';
+      const res = await fetch(`http://127.0.0.1:8000/api/screenwatcher/${endpoint}`, { method: 'POST' });
+      const data = await res.json();
+      setMessages(prev => [...prev, { type: 'ai', text: `SCREENWATCHER_CMD: ${data.status?.toUpperCase() || 'ERROR'}`, time: new Date() }]);
+    } catch (err) { console.error(err); }
   };
 
   const processFiles = useCallback(async (files: File[]) => {
@@ -177,9 +226,9 @@ export function RecoveryAIAssistant() {
           </button>
         </div>
         <div className="mt-3 flex gap-4 overflow-x-auto pb-1 text-[9px] font-mono text-cyan-900 uppercase tracking-widest">
-           <div className="flex items-center gap-1"><Zap className="w-3 h-3" /> MixHunter: ACTIVE</div>
-           <div className="flex items-center gap-1"><Activity className="w-3 h-3" /> ScreenWatcher: MONITORING</div>
-           <div className="flex items-center gap-1"><Search className="w-3 h-3" /> KeyReducer: NORMALIZING</div>
+           <div className={`flex items-center gap-1 cursor-pointer hover:text-purple-400 ${isMixHunterRunning ? 'text-purple-400' : ''}`} onClick={toggleMixHunter}><Zap className="w-3 h-3" /> MixHunter: {isMixHunterRunning ? 'ACTIVE' : 'IDLE'}</div>
+           <div className={`flex items-center gap-1 cursor-pointer hover:text-emerald-400 ${isScreenWatcherRunning ? 'text-emerald-400' : ''}`} onClick={toggleScreenWatcher}><Activity className="w-3 h-3" /> ScreenWatcher: {isScreenWatcherRunning ? 'MONITORING' : 'IDLE'}</div>
+           <div className={`flex items-center gap-1 cursor-pointer hover:text-cyan-400 ${isScannerRunning ? 'text-cyan-400' : ''}`} onClick={toggleScanner}><Search className="w-3 h-3" /> Scanner: {isScannerRunning ? 'RUNNING' : 'IDLE'}</div>
            <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>
         </div>
       </div>
