@@ -69,6 +69,34 @@ const BTC_ENDPOINTS: ApiEndpointWithStats[] = [
   },
 ];
 
+// ─── DigiByte ────────────────────────────────────────────────────────────
+const DGB_ENDPOINTS: ApiEndpointWithStats[] = [
+  {
+    name: 'Blockchair DGB',
+    url: (a) => `https://api.blockchair.com/digibyte/dashboards/address/${a}`,
+    parse: (data, symbol) => ({
+      confirmed: data.data[a].address.balance / 1e8,
+      unconfirmed: 0, total: 0, symbol, source: 'Blockchair DGB',
+      txCount: data.data[a].address.transactions
+    }),
+    failures: 0, lastFailure: 0, successCount: 0,
+  }
+];
+
+// ─── Bitcoin Gold ────────────────────────────────────────────────────────
+const BTG_ENDPOINTS: ApiEndpointWithStats[] = [
+  {
+    name: 'Blockchair BTG',
+    url: (a) => `https://api.blockchair.com/bitcoin-gold/dashboards/address/${a}`,
+    parse: (data, symbol) => ({
+      confirmed: data.data[a].address.balance / 1e8,
+      unconfirmed: 0, total: 0, symbol, source: 'Blockchair BTG',
+      txCount: data.data[a].address.transactions
+    }),
+    failures: 0, lastFailure: 0, successCount: 0,
+  }
+];
+
 // ─── Bitcoin Testnet ─────────────────────────────────────────────────────
 const BTC_TESTNET_ENDPOINTS: ApiEndpointWithStats[] = [
   {
@@ -453,6 +481,8 @@ const NETWORK_REGISTRY: Record<string, ApiEndpointWithStats[]> = {
   base: BASE_ENDPOINTS,
   bsc: BSC_ENDPOINTS,
   avalanche: AVALANCHE_ENDPOINTS,
+  digibyte: DGB_ENDPOINTS,
+  bitcoingold: BTG_ENDPOINTS,
 };
 
 // ─── Fetch with timeout + JSON parsing ───────────────────────────────────

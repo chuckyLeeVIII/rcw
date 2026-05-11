@@ -3,7 +3,8 @@ import itertools
 from typing import Dict, Optional, List
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins,
-    WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator
+    WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
+    P2PKHAddr, Bip32Secp256k1
 )
 
 def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
@@ -11,9 +12,15 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
     try:
         priv_bytes = bytes.fromhex(hex_key)
 
-        # Legacy (P2PKH)
+        # Legacy (P2PKH) - Compressed
         bip44_ctx = Bip44.FromPrivateKey(priv_bytes, Bip44Coins.BITCOIN)
         p2pkh = bip44_ctx.PublicKey().ToAddress()
+
+        # Legacy (P2PKH) - Uncompressed
+        # Bip44 internally uses compressed. For uncompressed we use raw keys.
+        bip32_ctx = Bip32Secp256k1.FromPrivateKey(priv_bytes)
+        pub_key_bytes_uncomp = bip32_ctx.PublicKey().RawUncompressed().ToBytes()
+        p2pkh_uncomp = P2PKHAddr.Encode(pub_key_bytes_uncomp)
 
         # Nested SegWit (P2SH-P2WPKH)
         bip49_ctx = Bip49.FromPrivateKey(priv_bytes, Bip49Coins.BITCOIN)
@@ -32,12 +39,14 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
             'wif_compressed': wif_comp,
             'wif_uncompressed': wif_uncomp,
             'btc_p2pkh': p2pkh,
+            'btc_p2pkh_uncompressed': p2pkh_uncomp,
             'btc_p2sh_p2wpkh': p2sh_p2wpkh,
             'btc_p2wpkh': p2wpkh,
             'btc': p2wpkh,
             'addresses': {
                 'btc': p2wpkh,
                 'btc_legacy': p2pkh,
+                'btc_legacy_uncompressed': p2pkh_uncomp,
                 'btc_nested': p2sh_p2wpkh
             }
         }

@@ -14,6 +14,9 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
 
   const connect = async () => {
+    // Priority Snapshot before action
+    fetch('http://127.0.0.1:8000/api/screenwatcher/snapshot', { method: 'POST' }).catch(() => {});
+
     // Mock connection
     setIsConnected(true);
     setAddress('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');

