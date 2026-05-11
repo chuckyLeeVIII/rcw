@@ -101,6 +101,12 @@ export const SUPPORTED_NETWORKS: NetworkInfo[] = [
   { id: 'ethereum', name: 'Ethereum', symbol: 'ETH', coinType: 60, rpcUrl: 'https://eth.llamarpc.com', explorerUrl: 'https://etherscan.io' },
   { id: 'ethereum-classic', name: 'Ethereum Classic', symbol: 'ETC', coinType: 61, explorerUrl: 'https://blockchair.com/ethereum-classic' },
   { id: 'bitcoin-cash', name: 'Bitcoin Cash', symbol: 'BCH', coinType: 145, explorerUrl: 'https://blockchair.com/bitcoin-cash' },
+  { id: 'digibyte', name: 'DigiByte', symbol: 'DGB', coinType: 20, rpcUrl: 'https://api.blockchair.com/digibyte' },
+  { id: 'bitcoingold', name: 'Bitcoin Gold', symbol: 'BTG', coinType: 156, rpcUrl: 'https://api.blockchair.com/bitcoin-gold' },
+  { id: 'ravencoin', name: 'Ravencoin', symbol: 'RVN', coinType: 175, rpcUrl: 'https://api.blockchair.com/ravencoin' },
+  { id: 'qtum', name: 'Qtum', symbol: 'QTUM', coinType: 2301, rpcUrl: 'https://api.blockchair.com/qtum' },
+  { id: 'tron', name: 'Tron', symbol: 'TRX', coinType: 195, rpcUrl: 'https://api.trongrid.io' },
+  { id: 'zcash', name: 'Zcash', symbol: 'ZEC', coinType: 133, rpcUrl: 'https://api.blockchair.com/zcash' },
 ];
 
 // All standard BIP derivation paths

@@ -201,9 +201,19 @@ export async function scanSeedPhrase(
 
   const purposes = [BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE, BIP86_PURPOSE];
 
-  // Custom paths for deep scan
+  // Comprehensive Custom Paths (from industry standards and legacy shards)
   const customPaths = [
-    "m/0'/0/0", "m/0/0", "m/45'/0", "m/48'/0'/0'/1'", "m/48'/0'/0'/2'", "m/47'/0'/0'"
+    "m/0'/0/0",         // BIP-32 Original / MultiBit HD / BRD
+    "m/0/0",           // Old Electrum (< 2.0)
+    "m/45'/0",         // BIP-45 Old Multisig
+    "m/48'/0'/0'/1'",  // BIP-48 Nested SegWit Multisig
+    "m/48'/0'/0'/2'",  // BIP-48 Native SegWit Multisig
+    "m/47'/0'/0'",     // BIP-47 Payment Codes
+    "m/0'",            // Blockchain.info Legacy
+    "m/0'/0",          // Copay / BitPay
+    "m/44'/0'/0/0/0",  // Ledger Legacy variant
+    "m/44'/0'/n'/0/0", // Copay / BitPay high account
+    "m/1337'/611'/0'", // Arbiter Relay Bot / Custom Data Silo
   ];
 
   let totalSteps = (purposes.length * SUPPORTED_NETWORKS.length * DEFAULT_ACCOUNTS * DEFAULT_SCAN_DEPTH) + customPaths.length;

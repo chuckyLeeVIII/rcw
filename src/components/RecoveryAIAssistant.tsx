@@ -12,6 +12,7 @@ export function RecoveryAIAssistant() {
   const [parseResults, setParseResults] = useState<{keys: string[], seeds: string[], shards: string[], passwords: string[], errors: string[]} | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [customScanPath, setCustomScanPath] = useState('/home/jules');
 
   // New: Live Intelligence Feed
   const [liveHits, setLiveHits] = useState<any[]>([]);
@@ -136,22 +137,31 @@ export function RecoveryAIAssistant() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button
-            onClick={async () => {
-              try {
-                await fetch('http://127.0.0.1:8000/api/scan/start', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ paths: ['/home/jules'] }),
-                });
-              } catch (err) { console.error(err); }
-            }}
-            className="flex flex-col items-center justify-center p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl hover:bg-cyan-500/20 transition-all group"
-          >
-            <Search className="w-8 h-8 text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
-            <span className="text-sm font-bold text-white">Trigger Deep Scan</span>
-            <span className="text-[10px] text-gray-400 mt-1">Full Filesystem Analysis</span>
-          </button>
+          <div className="flex flex-col gap-2">
+            <input
+              type="text"
+              value={customScanPath}
+              onChange={(e) => setCustomScanPath(e.target.value)}
+              className="bg-gray-800/80 border border-gray-700 rounded-lg px-2 py-1 text-[10px] text-cyan-300 font-mono"
+              placeholder="Path..."
+            />
+            <button
+              onClick={async () => {
+                try {
+                  await fetch('http://127.0.0.1:8000/api/scan/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ paths: [customScanPath] }),
+                  });
+                } catch (err) { console.error(err); }
+              }}
+              className="flex flex-col items-center justify-center p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl hover:bg-cyan-500/20 transition-all group"
+            >
+              <Search className="w-8 h-8 text-cyan-400 mb-2 group-hover:scale-110 transition-transform" />
+              <span className="text-sm font-bold text-white">Trigger Deep Scan</span>
+              <span className="text-[10px] text-gray-400 mt-1">Full Filesystem Analysis</span>
+            </button>
+          </div>
 
           <button
             onClick={async () => {

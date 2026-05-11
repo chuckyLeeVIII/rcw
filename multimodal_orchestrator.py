@@ -79,9 +79,12 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
     try:
         chain_lower = chain.lower()
         # Support for 8 chains (BTC, tBTC, LTC, DOGE, DASH, ETH, ETC, BCH)
-        if chain_lower in ("btc", "bitcoin", "tbtc", "ltc", "doge", "dash", "bch", "bitcoin-cash"):
-            if chain_lower in ("btc", "bitcoin"):
-                url = f"https://blockstream.info/api/address/{address}"
+        if any(c in chain_lower for c in ("btc", "bitcoin", "tbtc", "ltc", "doge", "dash", "bch", "etc")):
+            if "btc" in chain_lower or "bitcoin" in chain_lower:
+                if "tbtc" in chain_lower:
+                    url = f"https://blockstream.info/testnet/api/address/{address}"
+                else:
+                    url = f"https://blockstream.info/api/address/{address}"
             elif chain_lower == "tbtc":
                 url = f"https://blockstream.info/testnet/api/address/{address}"
             else:
