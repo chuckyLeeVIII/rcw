@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Bot, Sparkles, Upload, Activity, Search, Send, Terminal, Shield, Zap, Target } from 'lucide-react';
+import { Bot, Sparkles, Upload, Activity, Search, Send, Terminal, Shield, Zap, Target, User } from 'lucide-react';
 import { useRecoveryPool } from '../context/RecoveryPoolContext';
 import { parseWalletFile, generateRecoveryRecommendation } from '../utils/recoveryAssistant';
+import { getApiUrl } from '../utils/apiConfig';
 
 export function RecoveryAIAssistant() {
   const recoveryPool = useRecoveryPool();
@@ -20,8 +21,8 @@ export function RecoveryAIAssistant() {
     const interval = setInterval(async () => {
       try {
         const [hitsRes, statusRes] = await Promise.all([
-          fetch('http://127.0.0.1:8000/api/scan/results?limit=5'),
-          fetch('http://127.0.0.1:8000/api/status')
+          fetch(getApiUrl('/scan/results?limit=5')),
+          fetch(getApiUrl('/status'))
         ]);
         const hitsData = await hitsRes.json();
         const statusData = await statusRes.json();
@@ -70,7 +71,7 @@ export function RecoveryAIAssistant() {
     } else if (/^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})$/.test(input)) {
       setMessages(prev => [...prev, { type: 'ai', text: `TARGET_LOCK_ACQUIRED: Initiating priority scan for ${input}...`, time: new Date() }]);
       try {
-        await fetch('http://127.0.0.1:8000/api/scan/start', {
+        await fetch(getApiUrl('/scan/start'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ paths: ['/home/jules'], richlist: input }),
@@ -92,8 +93,11 @@ export function RecoveryAIAssistant() {
   const toggleScanner = async () => {
     try {
       const endpoint = isScannerRunning ? 'stop' : 'start';
-      const body = isScannerRunning ? undefined : JSON.stringify({ paths: ['/home/jules'] });
-      const res = await fetch(`http://127.0.0.1:8000/api/scan/${endpoint}`, {
+      const body = isScannerRunning ? undefined : JSON.stringify({
+        paths: ['/home/jules'],
+        deep_scan: isDeepSearchEnabled
+      });
+      const res = await fetch(getApiUrl(`/scan/${endpoint}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body
@@ -106,7 +110,7 @@ export function RecoveryAIAssistant() {
   const toggleMixHunter = async () => {
     try {
       const endpoint = isMixHunterRunning ? 'stop' : 'start';
-      const res = await fetch(`http://127.0.0.1:8000/api/mixhunter/${endpoint}`, { method: 'POST' });
+      const res = await fetch(getApiUrl(`/mixhunter/${endpoint}`), { method: 'POST' });
       const data = await res.json();
       setMessages(prev => [...prev, { type: 'ai', text: `MIXHUNTER_CMD: ${data.status?.toUpperCase() || 'ERROR'}`, time: new Date() }]);
     } catch (err) { console.error(err); }
@@ -115,7 +119,7 @@ export function RecoveryAIAssistant() {
   const toggleScreenWatcher = async () => {
     try {
       const endpoint = isScreenWatcherRunning ? 'stop' : 'start';
-      const res = await fetch(`http://127.0.0.1:8000/api/screenwatcher/${endpoint}`, { method: 'POST' });
+      const res = await fetch(getApiUrl(`/screenwatcher/${endpoint}`), { method: 'POST' });
       const data = await res.json();
       setMessages(prev => [...prev, { type: 'ai', text: `SCREENWATCHER_CMD: ${data.status?.toUpperCase() || 'ERROR'}`, time: new Date() }]);
     } catch (err) { console.error(err); }
@@ -234,8 +238,4 @@ export function RecoveryAIAssistant() {
       </div>
     </div>
   );
-}
-
-function User(props: any) {
-  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
 }

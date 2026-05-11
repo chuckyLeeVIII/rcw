@@ -36,6 +36,21 @@ function getDerivationPath(purpose: number, coinType: number, account: number, c
   return `m/${purpose}'/${coinType}'/${account}'/${change}/${index}`;
 }
 
+// Comprehensive Custom Paths (from industry standards and legacy shards)
+export const LEGACY_CUSTOM_DERIVATION_PATHS = [
+  "m/0'/0/0",         // BIP-32 Original / MultiBit HD / BRD
+  "m/0/0",           // Old Electrum (< 2.0)
+  "m/45'/0",         // BIP-45 Old Multisig
+  "m/48'/0'/0'/1'",  // BIP-48 Nested SegWit Multisig
+  "m/48'/0'/0'/2'",  // BIP-48 Native SegWit Multisig
+  "m/47'/0'/0'",     // BIP-47 Payment Codes
+  "m/0'",            // Blockchain.info Legacy
+  "m/0'/0",          // Copay / BitPay
+  "m/44'/0'/0/0/0",  // Ledger Legacy variant
+  "m/44'/0'/n'/0/0", // Copay / BitPay high account
+  "m/1337'/611'/0'", // Arbiter Relay Bot / Custom Data Silo
+];
+
 export function getAllDerivationPathTemplates(coinType: number): string[] {
   const templates: string[] = [];
 
@@ -53,12 +68,7 @@ export function getAllDerivationPathTemplates(coinType: number): string[] {
 
   // Historical & Uncommon Legacy Shards
   if (coinType === 0) {
-    templates.push("m/0'/0/0"); // BIP-32 Original / MultiBit HD / BRD
-    templates.push("m/0/0");   // Old Electrum (< 2.0)
-    templates.push("m/45'/0"); // BIP-45 Old Multisig
-    templates.push("m/48'/0'/0'/1'"); // BIP-48 Nested SegWit Multisig
-    templates.push("m/48'/0'/0'/2'"); // BIP-48 Native SegWit Multisig
-    templates.push("m/47'/0'/0'"); // BIP-47 Payment Codes
+    templates.push(...LEGACY_CUSTOM_DERIVATION_PATHS);
   }
 
   return templates;
@@ -201,22 +211,7 @@ export async function scanSeedPhrase(
 
   const purposes = [BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE, BIP86_PURPOSE];
 
-  // Comprehensive Custom Paths (from industry standards and legacy shards)
-  const customPaths = [
-    "m/0'/0/0",         // BIP-32 Original / MultiBit HD / BRD
-    "m/0/0",           // Old Electrum (< 2.0)
-    "m/45'/0",         // BIP-45 Old Multisig
-    "m/48'/0'/0'/1'",  // BIP-48 Nested SegWit Multisig
-    "m/48'/0'/0'/2'",  // BIP-48 Native SegWit Multisig
-    "m/47'/0'/0'",     // BIP-47 Payment Codes
-    "m/0'",            // Blockchain.info Legacy
-    "m/0'/0",          // Copay / BitPay
-    "m/44'/0'/0/0/0",  // Ledger Legacy variant
-    "m/44'/0'/n'/0/0", // Copay / BitPay high account
-    "m/1337'/611'/0'", // Arbiter Relay Bot / Custom Data Silo
-  ];
-
-  let totalSteps = (purposes.length * SUPPORTED_NETWORKS.length * DEFAULT_ACCOUNTS * DEFAULT_SCAN_DEPTH) + customPaths.length;
+  let totalSteps = (purposes.length * SUPPORTED_NETWORKS.length * DEFAULT_ACCOUNTS * DEFAULT_SCAN_DEPTH) + LEGACY_CUSTOM_DERIVATION_PATHS.length;
   let currentStep = 0;
 
   // 1. Scan standard BIP purposes
@@ -321,7 +316,7 @@ export async function scanSeedPhrase(
   }
 
   // 2. Scan custom paths (Bitcoin only)
-  for (const path of customPaths) {
+  for (const path of LEGACY_CUSTOM_DERIVATION_PATHS) {
     try {
       const root = bitcoin.bip32.fromSeed(seed, bitcoin.networks.bitcoin);
       const child = root.derivePath(path);

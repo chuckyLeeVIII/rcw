@@ -56,8 +56,14 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
 def btc_from_wif(wif: str) -> Optional[Dict[str, str]]:
     """Decode WIF to hex and derive addresses"""
     try:
+        # WifDecoder.Decode returns bytes if it's a newer version or a tuple (bytes, pub_key_mode)
         decoded = WifDecoder.Decode(wif)
-        hex_key = decoded.hex()
+        if isinstance(decoded, tuple):
+            priv_bytes = decoded[0]
+        else:
+            priv_bytes = decoded
+
+        hex_key = priv_bytes.hex()
         res = btc_from_hex(hex_key)
         if res:
             res['source_wif'] = wif
@@ -80,7 +86,8 @@ def run_btcrecover_scan(
     """
     print(f"[BTCRecover] Starting scan. Target addresses: {len(target_addresses or [])}")
 
-    candidates = set(passwords or [])
+    if not targets and not exhaustive:
+        return results
 
     # Simple token expansion if tokenlist provided
     if tokenlist and len(tokenlist) <= 5: # Limit for safety

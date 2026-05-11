@@ -57,9 +57,8 @@ class ScreenWatcherAgent:
                 if found or force:
                     self.assistant.feed_text(text, source="screen_reader", context="Manual Interaction" if force else "Background Monitor")
         except Exception as e:
-            # Silently fail if OCR tools (tesseract) are not installed in environment
-            # but log for debugging if needed
-            pass
+            # OCR tooling missing or capture failed; keep noise low but observable
+            print(f"[ScreenWatcher] capture/OCR failed: {type(e).__name__}: {e}")
 
     def _worker(self):
         while self._running:
@@ -78,3 +77,11 @@ class ScreenWatcherAgent:
         if self._thread:
             self._thread.join(timeout=1)
         print("[ScreenWatcher] Stopped")
+
+    def snapshot(self):
+        """Take a manual snapshot of the screen"""
+        self._capture_and_scan(force=True)
+
+    @property
+    def is_running(self) -> bool:
+        return self._running

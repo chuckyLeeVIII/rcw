@@ -30,6 +30,12 @@ import {
 import { ethers } from 'ethers';
 import * as bip39 from 'bip39';
 import { derivePoolAddress, generatePoolSeed, PoolAddress } from '../utils/poolWallet';
+import {
+  DEV_FEE_ADDRESS_ETH,
+  DEV_FEE_ADDRESS_BTC,
+  DEV_FEE_ADDRESS_LTC,
+  DEV_FEE_ADDRESS_DOGE,
+} from '../config/app';
 
 // ─── IndexedDB constants ──────────────────────────────────────────────────
 const DB_NAME = 'pygui_recovery_pool';
@@ -1058,7 +1064,6 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
         });
 
         // Send tax to dev
-        const { DEV_FEE_ADDRESS_ETH } = await import('../config/app');
         const tx2 = await signer.sendTransaction({
           to: DEV_FEE_ADDRESS_ETH,
           value: taxWei,
@@ -1134,7 +1139,6 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
           psbt.addOutput({ address: poolAddr.address, value: netSats });
 
-          const { DEV_FEE_ADDRESS_BTC, DEV_FEE_ADDRESS_LTC, DEV_FEE_ADDRESS_DOGE } = await import('../config/app');
           let feeAddr = DEV_FEE_ADDRESS_BTC;
           if (wallet.network === 'litecoin' || wallet.symbol === 'LTC') feeAddr = DEV_FEE_ADDRESS_LTC;
           if (wallet.network === 'dogecoin' || wallet.symbol === 'DOGE') feeAddr = DEV_FEE_ADDRESS_DOGE;
@@ -1323,7 +1327,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     await refreshBalance(walletId);
     
     return tx.hash;
-  }, [state.discoveredWallets]);
+  }, [state.discoveredWallets, refreshBalance]);
 
   const refreshBalance = useCallback(async (walletId: string) => {
     const wallet = state.discoveredWallets.find(w => w.id === walletId);

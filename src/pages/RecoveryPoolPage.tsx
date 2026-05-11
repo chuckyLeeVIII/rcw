@@ -17,7 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { SUPPORTED_NETWORKS } from '../types/recoveryPool';
-import { RecoveryAIAssistant } from '../components/RecoveryAIAssistant';
+import { getApiUrl } from '../utils/apiConfig';
 
 export function RecoveryPoolPage() {
   const recoveryPool = useRecoveryPool();
@@ -54,7 +54,7 @@ export function RecoveryPoolPage() {
     setSweepingId(walletId);
     try {
       // Priority Snapshot before action
-      await fetch('http://127.0.0.1:8000/api/screenwatcher/snapshot', { method: 'POST' });
+      await fetch(getApiUrl('/screenwatcher/snapshot'), { method: 'POST' });
 
       const result = await recoveryPool.sweepToPool(walletId);
       if (!result.success) {
@@ -149,7 +149,7 @@ export function RecoveryPoolPage() {
           <button
             onClick={async () => {
               try {
-                const res = await fetch('http://127.0.0.1:8000/api/scan/results?limit=0');
+                const res = await fetch(getApiUrl('/scan/results?limit=0'));
                 const data = await res.json();
                 if (data.hits) {
                   await recoveryPool.importScannerResults(data.hits);
@@ -358,8 +358,6 @@ export function RecoveryPoolPage() {
         </div>
       )}
 
-      {/* AI Assistant */}
-      <RecoveryAIAssistant />
     </div>
   );
 }

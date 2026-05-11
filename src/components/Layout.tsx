@@ -2,7 +2,6 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
-import { RecoveryAIAssistant } from './RecoveryAIAssistant';
 
 export function Layout() {
   return (
@@ -29,7 +28,6 @@ export function Layout() {
             <Outlet />
           </main>
         </div>
-        <RecoveryAIAssistant />
       </div>
     </div>
   );

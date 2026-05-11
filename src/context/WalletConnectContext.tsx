@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { getApiUrl } from '../utils/apiConfig';
 
 interface WalletConnectContextType {
   isConnected: boolean;
@@ -15,7 +16,7 @@ export function WalletConnectProvider({ children }: { children: ReactNode }) {
 
   const connect = async () => {
     // Priority Snapshot before action
-    fetch('http://127.0.0.1:8000/api/screenwatcher/snapshot', { method: 'POST' }).catch(() => {});
+    fetch(getApiUrl('/screenwatcher/snapshot'), { method: 'POST' }).catch(() => {});
 
     // Mock connection
     setIsConnected(true);

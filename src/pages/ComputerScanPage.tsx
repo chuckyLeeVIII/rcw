@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Play, Pause, RotateCcw, ShieldAlert, FileCode, Square } from 'lucide-react';
+import { getApiUrl } from '../utils/apiConfig';
 
 export function ComputerScanPage() {
   const [isScanning, setIsScanning] = useState(false);
@@ -12,7 +13,7 @@ export function ComputerScanPage() {
   const toggleScan = async () => {
     try {
       if (!isScanning) {
-        const res = await fetch('http://127.0.0.1:8000/api/scan/start', {
+        const res = await fetch(getApiUrl('/scan/start'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -27,7 +28,7 @@ export function ComputerScanPage() {
           setLogs(prev => [`[${new Date().toLocaleTimeString()}] Scan started on ${scanPath}`, ...prev]);
         }
       } else {
-        const res = await fetch('http://127.0.0.1:8000/api/scan/stop', { method: 'POST' });
+        const res = await fetch(getApiUrl('/scan/stop'), { method: 'POST' });
         const data = await res.json();
         if (data.status === 'stopped') {
           setIsScanning(false);
@@ -44,7 +45,7 @@ export function ComputerScanPage() {
   React.useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/status');
+        const res = await fetch(getApiUrl('/status'));
         const data = await res.json();
 
         if (data.computer_scanner) {
