@@ -69,7 +69,9 @@ async def get_results(limit: int = 100):
         return {"error": "Orchestrator not available"}
 
     with orchestrator._hits_lock:
-        hits = list(orchestrator.discovered_hits[-limit:])
+        hits = list(orchestrator.discovered_hits)
+        if limit > 0:
+            hits = hits[-limit:]
     return {"hits": hits}
 
 @app.get("/api/vault/entries")

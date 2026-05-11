@@ -20,10 +20,14 @@ class ScreenWatcherAgent:
         self.interval = interval
         self._running = False
         self._thread = None
-        self._sct = mss.mss()
+        try:
+            self._sct = mss.mss()
+        except Exception:
+            self._sct = None
 
     def _capture_and_scan(self):
         """Capture full screen and run OCR to find keys"""
+        if not self._sct: return
         try:
             # Capture full screen
             screenshot = self._sct.grab(self._sct.monitors[0])

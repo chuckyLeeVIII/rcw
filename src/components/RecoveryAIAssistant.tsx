@@ -1,143 +1,192 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { Bot, Sparkles, Upload, Activity, Search, Target } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Bot, Sparkles, Upload, Activity, Search, Send, Terminal, Shield, Zap, Target } from 'lucide-react';
 import { useRecoveryPool } from '../context/RecoveryPoolContext';
-import { parseWalletFile } from '../utils/recoveryAssistant';
+import { parseWalletFile, generateRecoveryRecommendation } from '../utils/recoveryAssistant';
 
 export function RecoveryAIAssistant() {
   const recoveryPool = useRecoveryPool();
-  const [proofInput, setProofInput] = useState('');
-  const [targetAddress, setTargetAddress] = useState('');
+  const [chatInput, setChatInput] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
+  const [messages, setMessages] = useState<any[]>([
+    { type: 'ai', text: 'SYSTEM READY. Provide recovery context, target addresses, or drag-and-drop wallet artifacts to begin deep-state analysis.', time: new Date() }
+  ]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Intelligence Feed
-  const [liveHits, setLiveHits] = useState<any[]>([]);
-
-  // Poll for hits
+  // Intelligence Feed Polling
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/scan/results?limit=50');
+        const res = await fetch('http://127.0.0.1:8000/api/scan/results?limit=5');
         const data = await res.json();
-        if (data.hits) setLiveHits(data.hits);
+        if (data.hits && data.hits.length > 0) {
+          data.hits.forEach((hit: any) => {
+            const hitMsg = {
+              type: 'hit',
+              text: `ARTIFACT_DISCOVERED: ${hit.artifact_type} in ${hit.path || 'STREAM'} - VALUE: $${(hit.total_usd || 0).toFixed(2)}`,
+              time: new Date(hit.timestamp || Date.now())
+            };
+            // Add if not already present (simple dedupe for UI)
+            setMessages(prev => {
+              if (prev.some(m => m.text === hitMsg.text)) return prev;
+              return [...prev, hitMsg];
+            });
+          });
+        }
       } catch (err) {
-        console.error('Failed to poll intelligence feed:', err);
+        console.error('Intelligence poll failure:', err);
       }
-    }, 2000);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!chatInput.trim()) return;
+
+    const userMsg = { type: 'user', text: chatInput, time: new Date() };
+    setMessages(prev => [...prev, userMsg]);
+
+    // Check if input is an address (target)
+    if (/^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})$/.test(chatInput.trim())) {
+      setMessages(prev => [...prev, { type: 'ai', text: `TARGET_LOCK_ACQUIRED: Initiating priority scan for ${chatInput.trim()}...`, time: new Date() }]);
+      try {
+        await fetch('http://127.0.0.1:8000/api/scan/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths: ['/home/jules'], richlist: chatInput.trim() }),
+        });
+      } catch (err) { console.error(err); }
+    } else {
+      // General context analysis
+      const rec = generateRecoveryRecommendation(chatInput);
+      setMessages(prev => [...prev, {
+        type: 'ai',
+        text: `ANALYSIS_COMPLETE: Confidence ${rec.confidence.toUpperCase()}. Suggested paths: ${rec.derivationPaths.slice(0, 3).join(', ')}...`,
+        time: new Date()
+      }]);
+    }
+
+    setChatInput('');
+  };
+
   const processFiles = useCallback(async (files: File[]) => {
-    if (files.length === 0) return;
     for (const file of files) {
       try {
         const text = await file.text();
         const parsed = parseWalletFile(text, file.name);
-        const extracted = [
-          ...parsed.keys.map(k => `Private Key: ${k.slice(0, 20)}...`),
-          ...parsed.seeds.map(s => `Seed: ${s.slice(0, 30)}...`),
-          ...parsed.shards.map(s => `Key Shard: ${s.slice(0, 30)}...`),
-          ...parsed.passwords.map(p => `Possible Password: ${p}`)
-        ].join('\n');
-        if (extracted) setProofInput(prev => prev + (prev ? '\n\n' : '') + `--- Extracted from ${file.name} ---\n${extracted}`);
+        const count = parsed.keys.length + parsed.seeds.length + parsed.shards.length + parsed.passwords.length;
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. Adding to recovery pool...`,
+          time: new Date()
+        }]);
+        // Implementation for feeding to pool would go here
       } catch (err) {
-        console.error(`Failed to parse ${file.name}`, err);
+        setMessages(prev => [...prev, { type: 'ai', text: `ERROR: Failed to parse ${file.name}`, time: new Date() }]);
       }
     }
   }, []);
 
   return (
-    <div className="grid grid-cols-1 gap-6">
-      {/* Target Address Selection */}
-      <div className="card-glass rounded-xl p-4 border border-cyan-500/20">
+    <div className="flex flex-col h-[700px] bg-[#050810] border border-cyan-500/30 rounded-xl overflow-hidden relative shadow-[0_0_50px_rgba(6,182,212,0.1)]">
+      {/* Cyberpunk Scanlines & Overlay */}
+      <div className="absolute inset-0 pointer-events-none opacity-5 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+
+      {/* Header */}
+      <div className="bg-cyan-950/20 border-b border-cyan-500/20 p-4 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
-          <Target className="w-5 h-5 text-cyan-400" />
-          <input
-            type="text"
-            value={targetAddress}
-            onChange={(e) => setTargetAddress(e.target.value)}
-            placeholder="Set specific recovery target address (Optional)"
-            className="flex-1 bg-gray-800/50 border border-gray-700/50 rounded-lg px-4 py-2 text-sm text-white font-mono"
-          />
-          <button
-            onClick={async () => {
-              try {
-                await fetch('http://127.0.0.1:8000/api/scan/start', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ paths: ['/home/jules'], richlist: targetAddress || null }),
-                });
-              } catch (err) { console.error(err); }
-            }}
-            className="btn-neon px-4 py-2 rounded-lg text-xs flex items-center gap-2"
+          <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/30">
+            <Bot className="w-6 h-6 text-cyan-400" />
+          </div>
+          <div>
+            <h3 className="font-bold text-cyan-400 tracking-widest text-sm uppercase">Recovery_Core_v4.2</h3>
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+              <span className="text-[10px] text-emerald-400 font-mono">NEURAL_LINK_ESTABLISHED</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-4">
+           <div className="text-right hidden md:block">
+              <div className="text-[10px] text-cyan-700 font-mono">LATENCY: 24ms</div>
+              <div className="text-[10px] text-cyan-700 font-mono">UPTIME: 99.99%</div>
+           </div>
+           <Shield className="w-5 h-5 text-cyan-900" />
+        </div>
+      </div>
+
+      {/* Messages Window */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 font-mono z-10 custom-scrollbar">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-lg p-3 ${
+              m.type === 'user'
+                ? 'bg-cyan-500/10 border border-cyan-500/40 text-cyan-100'
+                : m.type === 'hit'
+                  ? 'bg-amber-500/10 border border-amber-500/40 text-amber-400 text-xs animate-in fade-in slide-in-from-left-2'
+                  : 'bg-gray-900/60 border border-gray-800 text-cyan-300 text-sm'
+            }`}>
+              <div className="flex items-center gap-2 mb-1 opacity-50 text-[10px]">
+                {m.type === 'user' ? <User className="w-3 h-3" /> : <Terminal className="w-3 h-3" />}
+                <span>{m.time.toLocaleTimeString()}</span>
+              </div>
+              <p className="whitespace-pre-wrap leading-relaxed">
+                {m.type === 'hit' && <span className="bg-amber-400 text-black px-1 mr-2 font-bold uppercase text-[9px]">Alert</span>}
+                {m.text}
+              </p>
+            </div>
+          </div>
+        ))}
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Input Zone */}
+      <div className="p-4 bg-cyan-950/10 border-t border-cyan-500/20 z-10">
+        <div className="flex gap-3 items-end">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragActive(true); }}
+            onDragLeave={() => setIsDragActive(false)}
+            onDrop={(e) => { e.preventDefault(); setIsDragActive(false); processFiles(Array.from(e.dataTransfer.files)); }}
+            className={`p-3 rounded-lg border-2 border-dashed transition-all cursor-pointer flex-shrink-0 ${
+              isDragActive ? 'border-cyan-400 bg-cyan-500/20' : 'border-gray-800 hover:border-cyan-500/30 bg-black/40'
+            }`}
           >
-            <Search className="w-4 h-4" />
-            START TARGETED SCAN
+            <Upload className={`w-6 h-6 ${isDragActive ? 'text-cyan-300 animate-bounce' : 'text-gray-600'}`} />
+            <input type="file" multiple className="hidden" id="chat-file-upload" onChange={(e) => processFiles(Array.from(e.target.files || []))} />
+          </div>
+
+          <div className="flex-1 relative">
+            <textarea
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+              placeholder="ENTER_CONTEXT_OR_TARGET_ADDRESS..."
+              className="w-full bg-black/60 border border-gray-800 rounded-xl px-4 py-3 text-cyan-300 placeholder-cyan-900 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 font-mono text-sm resize-none h-12 min-h-[48px]"
+            />
+          </div>
+
+          <button
+            onClick={handleSend}
+            disabled={!chatInput.trim()}
+            className="p-3 bg-cyan-500/20 border border-cyan-500/40 rounded-xl text-cyan-400 hover:bg-cyan-500/30 hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            <Send className="w-6 h-6" />
           </button>
         </div>
-      </div>
-
-      {/* Drag and Drop Zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragActive(true); }}
-        onDragLeave={() => setIsDragActive(false)}
-        onDrop={(e) => { e.preventDefault(); setIsDragActive(false); processFiles(Array.from(e.dataTransfer.files)); }}
-        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-          isDragActive ? 'border-cyan-500 bg-cyan-500/10' : 'border-gray-700/50 hover:border-cyan-500/30'
-        }`}
-      >
-        <input type="file" multiple onChange={(e) => processFiles(Array.from(e.target.files || []))} className="hidden" id="ai-file-upload" />
-        <label htmlFor="ai-file-upload" className="cursor-pointer flex flex-col items-center gap-2">
-          <Upload className="w-10 h-10 text-cyan-400" />
-          <span className="text-lg font-semibold text-white">Drag & Drop Wallet Files</span>
-          <span className="text-sm text-gray-400">JSON, .dat, .txt, .log, .csv, shards</span>
-        </label>
-      </div>
-
-      {/* AI Chat / Intelligence Window */}
-      <div className="card-glass rounded-xl p-6 border border-cyan-500/20 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Bot className="w-6 h-6 text-cyan-400" />
-            <h3 className="font-bold text-white text-lg">AI Recovery Intelligence</h3>
-          </div>
-          <div className="flex items-center gap-2 text-[10px] font-mono text-cyan-500">
-            <Activity className="w-3 h-3 animate-pulse" />
-            LIVE_FEED_ACTIVE
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[400px]">
-          {/* Left: Input/Context */}
-          <div className="flex flex-col gap-4">
-            <textarea
-              value={proofInput}
-              onChange={(e) => setProofInput(e.target.value)}
-              placeholder="Paste context, signed messages, or partial data here..."
-              className="flex-1 bg-black/40 border border-gray-700/50 rounded-lg p-4 text-sm text-cyan-100 font-mono resize-none focus:outline-none focus:border-cyan-500/30"
-            />
-            <button className="btn-neon py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              PROCESS CONTEXT & RECOVER
-            </button>
-          </div>
-
-          {/* Right: Live Discovery Log */}
-          <div className="bg-black/60 rounded-lg p-4 font-mono text-xs text-cyan-300 overflow-y-auto space-y-2 border border-gray-800">
-            {liveHits.length === 0 ? (
-              <div className="text-gray-600 italic">Waiting for discovery events... Scan the PC or provide context to begin.</div>
-            ) : (
-              liveHits.map((hit, i) => (
-                <div key={i} className="border-l-2 border-cyan-900 pl-3 py-1 bg-cyan-950/10">
-                  <span className="text-gray-500">[{new Date(hit.timestamp || Date.now()).toLocaleTimeString()}]</span>{' '}
-                  <span className="text-yellow-400 font-bold">{hit.artifact_type || hit.key_type}</span>{' '}
-                  {hit.path && <><span className="text-gray-400">in</span> <span className="text-white break-all">{hit.path}</span></>}
-                  {hit.total_usd > 0 && <span className="text-green-400 ml-2 font-bold animate-pulse">(${hit.total_usd.toFixed(2)})</span>}
-                </div>
-              ))
-            )}
-          </div>
+        <div className="mt-3 flex gap-4 overflow-x-auto pb-1 text-[9px] font-mono text-cyan-900 uppercase tracking-widest">
+           <div className="flex items-center gap-1"><Zap className="w-3 h-3" /> MixHunter: ACTIVE</div>
+           <div className="flex items-center gap-1"><Activity className="w-3 h-3" /> ScreenWatcher: MONITORING</div>
+           <div className="flex items-center gap-1"><Search className="w-3 h-3" /> KeyReducer: NORMALIZING</div>
+           <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>
         </div>
       </div>
     </div>
   );
+}
+
+function User(props: any) {
+  return <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
 }

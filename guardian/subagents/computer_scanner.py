@@ -187,10 +187,16 @@ class ComputerScannerAgent:
             # If path is not a file, it might be a single address target
             addr = self.richlist_path
             self.stats["richlist_hits"] += 1
+            # Try to guess chain from address format
+            chain = 'btc'
+            if addr.startswith('0x'): chain = 'eth'
+            elif addr.startswith('L') or addr.startswith('M'): chain = 'ltc'
+            elif addr.startswith('D'): chain = 'doge'
+
             self._hit_queue.put(ScanHit(
                 artifact_type="Specific Target Search",
                 path="USER_INPUT",
-                addresses={'target': addr},
+                addresses={chain: addr},
                 balances={},
                 metadata={"match": addr, "priority": "CRITICAL"},
                 timestamp=datetime.now(timezone.utc)
@@ -292,10 +298,13 @@ class ComputerScannerAgent:
                     if ktype.startswith('address'):
                         if val in self._richlist:
                             self.stats["richlist_hits"] += 1
+                            chain = ktype.split('_')[-1] if '_' in ktype else 'btc'
+                            if chain == 'bech32': chain = 'btc'
+
                             hit = ScanHit(
                                 artifact_type=f"Richlist Hit ({ktype})",
                                 path=filepath,
-                                addresses={'detected': val},
+                                addresses={chain: val},
                                 balances={},
                                 metadata={"match": val, "priority": "CRITICAL"},
                                 timestamp=datetime.now(timezone.utc)

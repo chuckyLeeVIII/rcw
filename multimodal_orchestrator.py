@@ -359,6 +359,9 @@ class MultimodalOrchestrator:
         
         # Start ComputerScanner (idle until explicitly started via API/CLI)
         if self.computer_scanner:
+            # AUTO-START PRIORITY SCAN
+            self.computer_scanner.start(num_workers=1)
+
             t = threading.Thread(target=self._consume_computer_scanner_hits, daemon=True)
             t.start()
             self._threads.append(t)
