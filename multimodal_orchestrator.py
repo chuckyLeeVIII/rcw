@@ -538,7 +538,7 @@ class MultimodalOrchestrator:
             'vault_stats': self.vault.get_stats(),
             'agents': {
                 'key_reducer': {'running': self.key_reducer.is_running if self.key_reducer else False},
-                'screen_watcher': {'running': self.screen_watcher._running if self.screen_watcher else False},
+                'screen_watcher': {'running': self.screen_watcher.is_running if self.screen_watcher else False},
             }
         }
         
@@ -557,6 +557,14 @@ class MultimodalOrchestrator:
         
         return status
     
+    def get_recent_hits(self, limit: int = 100) -> List[Dict]:
+        """Get recent hits with thread safety"""
+        with self._hits_lock:
+            hits = list(self.discovered_hits)
+            if limit > 0:
+                hits = hits[-limit:]
+            return hits
+
     def receive_event(self, event_type: str, data: Dict):
         """Receive event from sub-agents (for KeyReducer assistant callback)"""
         event = OrchestratorEvent(

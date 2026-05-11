@@ -1,14 +1,7 @@
-import React, { useState } from 'react';
-import { RecoveryAIAssistant } from '../components/RecoveryAIAssistant';
+import React from 'react';
 import {
-  Search,
-  Cpu,
-  ArrowRight,
-  Bot,
-  ShieldCheck,
-  FileText,
+  Key,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 
 import { WalletRecovery } from '../components/WalletRecovery';
 

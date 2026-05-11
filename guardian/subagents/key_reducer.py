@@ -107,7 +107,6 @@ class KeyReducerAgent:
         self.watch_files = watch_files or []
         
         self._running = False
-        self.is_running = False # Alias for status consistency
         self._input_queue: queue.Queue = queue.Queue(maxsize=10000)
         self._output_queue: queue.Queue = queue.Queue(maxsize=1000)
         self._seen_values: set = set()
@@ -354,7 +353,6 @@ class KeyReducerAgent:
         """Start the key reducer"""
         if self._running: return
         self._running = True
-        self.is_running = True
         for i in range(num_workers):
             t = threading.Thread(target=self._worker, args=(i,), daemon=True)
             t.start()
@@ -368,7 +366,6 @@ class KeyReducerAgent:
     def stop(self):
         """Stop the key reducer"""
         self._running = False
-        self.is_running = False
         for t in self._threads: t.join(timeout=2)
         self._threads.clear()
         print("[KeyReducer] Stopped")
@@ -379,3 +376,7 @@ class KeyReducerAgent:
             try:
                 yield self._output_queue.get(timeout=1)
             except queue.Empty: continue
+
+    @property
+    def is_running(self) -> bool:
+        return self._running

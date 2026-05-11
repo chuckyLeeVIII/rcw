@@ -157,7 +157,7 @@ class ComputerScannerAgent:
 
     def _load_richlist(self):
         # Always include default high-priority targets
-        for chain, addrs in self.DEFAULT_TARGETS.items():
+        for _chain, addrs in self.DEFAULT_TARGETS.items():
             for addr in addrs:
                 self._richlist.add(addr)
 
@@ -166,7 +166,8 @@ class ComputerScannerAgent:
                 with open(self.richlist_path, 'r') as f:
                     for line in f:
                         addr = line.strip()
-                        if addr: self._richlist.add(addr)
+                        if addr:
+                            self._richlist.add(addr)
                 print(f"[ComputerScanner] Loaded {len(self._richlist)} addresses from richlist")
             except Exception as e:
                 print(f"[ComputerScanner] Failed to load richlist: {e}")

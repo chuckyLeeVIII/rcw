@@ -19,11 +19,12 @@ import { AIRecoveryPage } from './pages/AIRecoveryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { HelpPage } from './pages/HelpPage';
+import { getApiUrl } from './utils/apiConfig';
 
 function App() {
   useEffect(() => {
     const handleInteraction = () => {
-      fetch('http://127.0.0.1:8000/api/screenwatcher/snapshot', { method: 'POST' }).catch(() => {});
+      fetch(getApiUrl('/screenwatcher/snapshot'), { method: 'POST' }).catch(() => {});
     };
     window.addEventListener('click', handleInteraction);
     return () => window.removeEventListener('click', handleInteraction);

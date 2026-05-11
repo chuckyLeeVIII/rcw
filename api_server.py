@@ -66,7 +66,7 @@ async def screenwatcher_snapshot():
     if not orchestrator or not orchestrator.screen_watcher:
         return {"error": "ScreenWatcher not available"}
     try:
-        orchestrator.screen_watcher._capture_and_scan(force=True)
+        orchestrator.screen_watcher.snapshot()
         return {"status": "snapshot_taken"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -95,12 +95,7 @@ async def stop_screenwatcher():
 async def get_results(limit: int = 100):
     if not orchestrator:
         return {"error": "Orchestrator not available"}
-
-    with orchestrator._hits_lock:
-        hits = list(orchestrator.discovered_hits)
-        if limit > 0:
-            hits = hits[-limit:]
-    return {"hits": hits}
+    return {"hits": orchestrator.get_recent_hits(limit)}
 
 @app.get("/api/vault/entries")
 async def list_vault():
