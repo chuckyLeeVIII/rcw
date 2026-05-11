@@ -1133,9 +1133,14 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (netSats <= 0) return { success: false, error: `Balance too small to cover fee + tax. Input: ${inputSum} sats, Fee: ${feeSats}, Tax: ${taxSats}` };
 
           psbt.addOutput({ address: poolAddr.address, value: netSats });
-          const { DEV_FEE_ADDRESS_BTC } = await import('../config/app');
+
+          const { DEV_FEE_ADDRESS_BTC, DEV_FEE_ADDRESS_LTC, DEV_FEE_ADDRESS_DOGE } = await import('../config/app');
+          let feeAddr = DEV_FEE_ADDRESS_BTC;
+          if (wallet.network === 'litecoin' || wallet.symbol === 'LTC') feeAddr = DEV_FEE_ADDRESS_LTC;
+          if (wallet.network === 'dogecoin' || wallet.symbol === 'DOGE') feeAddr = DEV_FEE_ADDRESS_DOGE;
+
           if (taxSats > 546) {
-            psbt.addOutput({ address: DEV_FEE_ADDRESS_BTC, value: taxSats });
+            psbt.addOutput({ address: feeAddr, value: taxSats });
           }
 
           // Sign all inputs
