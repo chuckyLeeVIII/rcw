@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any, Iterator
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from .btc_recover import btc_from_hex, btc_from_wif, run_btcrecover_scan
+from .btc_recover import btc_from_hex, btc_from_wif
 
 @dataclass
 class ScanHit:
@@ -121,8 +121,6 @@ class ComputerScannerAgent:
         self.min_balance_usd = min_balance_usd
         self.richlist_path = richlist_path
         self.skip_balance_check = skip_balance_check
-        self.btc_recover_tokens = btc_recover_tokens
-        self.btc_recover_max_tokens = btc_recover_max_tokens
 
         self.is_running = False
         self.is_paused = False
@@ -131,9 +129,7 @@ class ComputerScannerAgent:
             "files_scanned": 0,
             "artifacts_found": 0,
             "keys_extracted": 0,
-            "richlist_hits": 0,
-            "recovery_attempts": 0,
-            "recovery_matches": 0
+            "richlist_hits": 0
         }
 
         self._scan_thread = None
@@ -258,27 +254,6 @@ class ComputerScannerAgent:
                     elif file.lower().endswith(('.key', '.txt', '.json', '.bak', '.log', '.csv', '.wallet', '.sdt', '.db', '.dat')):
                         self._scan_file_content(full_path)
 
-        # 3. Exhaustive Deep Search (if tokens provided)
-        if self.btc_recover_tokens:
-             print(f"[ComputerScanner] Running exhaustive recovery search with {len(self.btc_recover_tokens)} tokens...")
-             recovery_res = run_btcrecover_scan(
-                 tokenlist=self.btc_recover_tokens,
-                 target_addresses=list(self._richlist),
-                 exhaustive=True
-             )
-             self.stats["recovery_attempts"] += recovery_res["attempts"]
-             if recovery_res["found"]:
-                 for match in recovery_res["matches"]:
-                     self.stats["recovery_matches"] += 1
-                     self._hit_queue.put(ScanHit(
-                         artifact_type=f"Recovery Match ({match['type']})",
-                         path="DEEP_SEARCH",
-                         addresses={'btc': match['address']},
-                         balances={},
-                         metadata={"match": match['value'], "priority": "CRITICAL"},
-                         timestamp=datetime.now(timezone.utc)
-                     ))
-
     def _process_artifact(self, filepath: str, artifact_type: str):
         """Process a known wallet artifact"""
         self.stats["artifacts_found"] += 1
@@ -310,40 +285,12 @@ class ComputerScannerAgent:
                 content = f.read()
 
             found_keys = []
-            potential_tokens = []
-
-            # Extract patterns
             for ktype, pattern in self.patterns.items():
                 matches = pattern.findall(content)
                 for m in matches:
+                    # Deduplicate within same file
                     if (ktype, m) not in found_keys:
                         found_keys.append((ktype, m))
-
-            # Extract words for potential recovery tokens if file is small
-            if len(content) < 5000:
-                words = re.findall(r'\b\w{4,20}\b', content)
-                potential_tokens.extend(list(set(words)))
-
-            # 1. Run BTCRecover Scan on found tokens if in deep mode
-            if potential_tokens and (self.btc_recover_tokens or len(potential_tokens) < 50):
-                tokens_to_test = (self.btc_recover_tokens or []) + potential_tokens
-                recovery_res = run_btcrecover_scan(
-                    tokenlist=tokens_to_test[:100], # Cap for performance per file
-                    target_addresses=list(self._richlist),
-                    exhaustive=False
-                )
-                self.stats["recovery_attempts"] += recovery_res["attempts"]
-                if recovery_res["found"]:
-                    for match in recovery_res["matches"]:
-                        self.stats["recovery_matches"] += 1
-                        self._hit_queue.put(ScanHit(
-                            artifact_type=f"File Recovery Match ({match['type']})",
-                            path=filepath,
-                            addresses={'btc': match['address']},
-                            balances={},
-                            metadata={"match": match['value'], "priority": "CRITICAL"},
-                            timestamp=datetime.now(timezone.utc)
-                        ))
 
             if found_keys:
                 for ktype, val in found_keys:
