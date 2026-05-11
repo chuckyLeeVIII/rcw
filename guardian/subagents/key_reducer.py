@@ -27,7 +27,7 @@ from bip_utils import (
 # Multi-chain support via blockthon (if available)
 try:
     import sys
-    sys.path.insert(0, '/run/media/chucky/onn. Disk/v4.3.6')
+    # sys.path.insert(0, '/run/media/chucky/onn. Disk/v4.3.6')
     from blockthon.Utils import PrivateKey_To_Addr as btc_addr
     from blockthon.Ethereum import PrivateKey_To_ETH as eth_addr
     from blockthon.Litecoin import PrivateKey_To_LTC as ltc_addr
