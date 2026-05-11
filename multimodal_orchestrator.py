@@ -505,7 +505,8 @@ class MultimodalOrchestrator:
                 
                 if 'found' in event.event_type:
                     self._stats['keys_found'] += 1
-                    self._stats['total_value_usd'] += event.data.get('balance_usd', 0) or event.data.get('total_usd', 0)
+                    total_usd = event.data.get('balance_usd', 0) or event.data.get('total_usd', 0)
+                    self._stats['total_value_usd'] += total_usd
                 
                 # Call registered handlers
                 handlers = self._event_handlers.get(event.event_type, [])

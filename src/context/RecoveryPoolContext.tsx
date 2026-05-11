@@ -678,20 +678,22 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [setState, nextId, toPoolWallet, checkAllBalances]);
 
   function getSymbolForNetwork(network: string): string {
+    const n = network.toLowerCase();
     const symbols: Record<string, string> = {
       eth: 'ETH', ethereum: 'ETH',
       btc: 'BTC', bitcoin: 'BTC',
       ltc: 'LTC', litecoin: 'LTC',
       doge: 'DOGE', dogecoin: 'DOGE',
       dash: 'DASH',
-      dgb: 'DGB',
-      btg: 'BTG',
+      dgb: 'DGB', digibyte: 'DGB',
+      btg: 'BTG', bitcoingold: 'BTG',
       qtum: 'QTUM',
-      rvn: 'RVN',
-      trx: 'TRX',
-      zec: 'ZEC',
+      rvn: 'RVN', ravencoin: 'RVN',
+      trx: 'TRX', tron: 'TRX',
+      zec: 'ZEC', zcash: 'ZEC',
+      tbtc: 'tBTC', 'bitcoin-testnet': 'tBTC',
     };
-    return symbols[network.toLowerCase()] || 'UNK';
+    return symbols[n] || 'UNK';
   }
 
 
@@ -1326,11 +1328,18 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const provider = new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
     const balance = await provider.getBalance(wallet.address);
     
-    dispatch({
-      type: 'UPDATE_WALLET',
-      payload: { id: walletId, updates: { balance: Number(ethers.utils.formatEther(balance)) } }
+    setState(prev => {
+      const updated = prev.discoveredWallets.map(w =>
+        w.id === walletId ? { ...w, balance: Number(ethers.utils.formatEther(balance)), balanceFormatted: ethers.utils.formatEther(balance), lastChecked: Date.now() } : w
+      );
+      const totals = calculateTotalBalances(updated);
+      return {
+        ...prev,
+        discoveredWallets: updated,
+        totalBalance: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.total])),
+        totalBalanceFormatted: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.formatted])),
+      };
     });
-    await recalcTotals();
   }, [state.discoveredWallets]);
 
   // ── Full export/import ──

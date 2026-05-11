@@ -205,18 +205,19 @@ class Vault:
         """Get vault statistics"""
         with self._lock:
             total_entries = len(self._entries)
-            total_value = sum(
-                entry.metadata.get('total_usd', 0)
-                for entry in self._entries.values()
-            )
+            total_value = 0.0
             
             by_source = {}
             for entry in self._entries.values():
+                val = entry.metadata.get('total_usd', 0)
+                if not isinstance(val, (int, float)): val = 0.0
+                total_value += val
+
                 source = entry.source
                 if source not in by_source:
-                    by_source[source] = {'count': 0, 'value': 0}
+                    by_source[source] = {'count': 0, 'value': 0.0}
                 by_source[source]['count'] += 1
-                by_source[source]['value'] += entry.metadata.get('total_usd', 0)
+                by_source[source]['value'] += val
         
         return {
             'total_entries': total_entries,

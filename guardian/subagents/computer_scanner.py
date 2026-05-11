@@ -181,7 +181,37 @@ class ComputerScannerAgent:
             self._scan_thread.join(timeout=1)
 
     def _run_scan(self):
-        print(f"[ComputerScanner] Starting scan on {len(self.scan_paths)} base paths")
+        print(f"[ComputerScanner] Prioritizing Default and Specific Target Scan...")
+        # 1. Check Specific Target (if set via UI/API)
+        if self.richlist_path and not os.path.exists(self.richlist_path):
+            # If path is not a file, it might be a single address target
+            addr = self.richlist_path
+            self.stats["richlist_hits"] += 1
+            self._hit_queue.put(ScanHit(
+                artifact_type="Specific Target Search",
+                path="USER_INPUT",
+                addresses={'target': addr},
+                balances={},
+                metadata={"match": addr, "priority": "CRITICAL"},
+                timestamp=datetime.now(timezone.utc)
+            ))
+
+        # 2. Check Defaults
+        for chain, addrs in self.DEFAULT_TARGETS.items():
+            for addr in addrs:
+                if not self.is_running: return
+                self.stats["richlist_hits"] += 1
+                hit = ScanHit(
+                    artifact_type=f"Default Target ({chain})",
+                    path="INTERNAL_TARGET_LIST",
+                    addresses={chain: addr},
+                    balances={},
+                    metadata={"match": addr, "priority": "CRITICAL"},
+                    timestamp=datetime.now(timezone.utc)
+                )
+                self._hit_queue.put(hit)
+
+        print(f"[ComputerScanner] Starting filesystem scan on {len(self.scan_paths)} base paths")
         for root_path in self.scan_paths:
             if not self.is_running: break
 
