@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAccount } from '../context/WalletContext';
 import { cryptoList } from '../data/cryptoList';
-import { WalletRecovery } from '../components/WalletRecovery';
 import { Wallet, Copy, ExternalLink, Shield, RefreshCw, Loader2 } from 'lucide-react';
 import { checkBalancesBatch, getApiHealth } from '../utils/balanceChecker';
 import { NETWORKS } from '../config/app';
@@ -242,8 +241,6 @@ export function WalletPage() {
           })}
         </div>
       )}
-
-      <WalletRecovery />
     </div>
   );
 }

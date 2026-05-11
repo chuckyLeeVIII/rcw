@@ -106,11 +106,7 @@ export function RecoveryAIAssistant() {
   const toggleScanner = async () => {
     try {
       const endpoint = isScannerRunning ? 'stop' : 'start';
-<<<<<<< HEAD
       const body = isScannerRunning ? undefined : JSON.stringify({
-=======
-      const body = isScannerRunning ? undefined : JSON.stringify({
->>>>>>> origin/main
         paths: ['/home/jules'],
         deep_scan: isDeepSearchEnabled
       });

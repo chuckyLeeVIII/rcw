@@ -14,20 +14,22 @@ import {
   Layers,
   ShoppingBag,
   HardDrive,
-  BookOpen
+  BookOpen,
+  Bot,
+  Search
 } from 'lucide-react';
 
 const mainNavItems = [
   { to: '/', icon: Home, label: 'Dashboard' },
-  { to: '/ai-recovery', icon: Shield, label: 'AI Recovery' },
+  { to: '/ai-recovery', icon: Bot, label: 'AI Recovery Hub' },
   { to: '/wallet', icon: Wallet, label: 'Wallet' },
   { to: '/send', icon: Send, label: 'Send' },
   { to: '/history', icon: History, label: 'History' },
-  { to: '/recovery', icon: Key, label: 'Recovery' },
+  { to: '/recovery', icon: Key, label: 'Manual Recovery' },
   { to: '/pool', icon: Layers, label: 'Pool' },
   { to: '/marketplace', icon: ShoppingBag, label: 'NFT Market' },
   { to: '/ledger', icon: BookOpen, label: 'Master Ledger' },
-  { to: '/scan', icon: HardDrive, label: 'PC Search' },
+  { to: '/scan', icon: Search, label: 'System Scanner' },
 ];
 
 const bottomNavItems = [

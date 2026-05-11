@@ -1289,6 +1289,28 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [poolMasterSeed, recoverFromSeed]);
 
   // ── Send / Withdraw ──
+  const refreshBalance = useCallback(async (walletId: string) => {
+    const wallet = state.discoveredWallets.find(w => w.id === walletId);
+    if (!wallet) return;
+
+    // Fetch fresh balance from blockchain
+    const provider = new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
+    const balance = await provider.getBalance(wallet.address);
+
+    setState(prev => {
+      const updated = prev.discoveredWallets.map(w =>
+        w.id === walletId ? { ...w, balance: Number(ethers.utils.formatEther(balance)), balanceFormatted: ethers.utils.formatEther(balance), lastChecked: Date.now() } : w
+      );
+      const totals = calculateTotalBalances(updated);
+      return {
+        ...prev,
+        discoveredWallets: updated,
+        totalBalance: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.total])),
+        totalBalanceFormatted: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.formatted])),
+      };
+    });
+  }, [state.discoveredWallets]);
+
   const sendFromWallet = useCallback(async (walletId: string, toAddress: string, amount: string): Promise<string> => {
     const wallet = state.discoveredWallets.find(w => w.id === walletId);
     if (!wallet || !wallet.privateKey) {
@@ -1328,28 +1350,6 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     
     return tx.hash;
   }, [state.discoveredWallets, refreshBalance]);
-
-  const refreshBalance = useCallback(async (walletId: string) => {
-    const wallet = state.discoveredWallets.find(w => w.id === walletId);
-    if (!wallet) return;
-    
-    // Fetch fresh balance from blockchain
-    const provider = new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
-    const balance = await provider.getBalance(wallet.address);
-    
-    setState(prev => {
-      const updated = prev.discoveredWallets.map(w =>
-        w.id === walletId ? { ...w, balance: Number(ethers.utils.formatEther(balance)), balanceFormatted: ethers.utils.formatEther(balance), lastChecked: Date.now() } : w
-      );
-      const totals = calculateTotalBalances(updated);
-      return {
-        ...prev,
-        discoveredWallets: updated,
-        totalBalance: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.total])),
-        totalBalanceFormatted: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.formatted])),
-      };
-    });
-  }, [state.discoveredWallets]);
 
   // ── Full export/import ──
   const exportPoolAsJSON = useCallback(async () => {

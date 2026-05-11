@@ -1,7 +1,5 @@
 import hashlib
 import itertools
-import re
-import traceback
 from typing import Dict, Optional, List, Set, Iterator
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins,
