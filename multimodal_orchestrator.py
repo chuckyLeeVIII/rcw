@@ -551,8 +551,6 @@ class MultimodalOrchestrator:
                 'artifacts_found': cs_stats.get('artifacts_found', 0),
                 'keys_extracted': cs_stats.get('keys_extracted', 0),
                 'richlist_hits': cs_stats.get('richlist_hits', 0),
-                'recovery_attempts': cs_stats.get('recovery_attempts', 0),
-                'recovery_matches': cs_stats.get('recovery_matches', 0),
             }
         
         return status
