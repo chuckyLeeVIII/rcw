@@ -400,17 +400,24 @@ class MultimodalOrchestrator:
             if not self._running:
                 break
             
+            event_data = {
+                'key_type': key_found.key_type,
+                'addresses': key_found.addresses,
+                'balances': key_found.balances,
+                'total_usd': key_found.total_usd,
+                'source': key_found.source,
+                'timestamp': key_found.timestamp.isoformat(),
+            }
+
+            with self._hits_lock:
+                self.discovered_hits.append(event_data)
+                if len(self.discovered_hits) > 1000:
+                    self.discovered_hits.pop(0)
+
             event = OrchestratorEvent(
                 event_type="key_reducer:found",
                 source="key_reducer",
-                data={
-                    'key_type': key_found.key_type,
-                    'addresses': key_found.addresses,
-                    'balances': key_found.balances,
-                    'total_usd': key_found.total_usd,
-                    'source': key_found.source,
-                    'timestamp': key_found.timestamp.isoformat(),
-                },
+                data=event_data,
                 timestamp=datetime.now(timezone.utc),
             )
             

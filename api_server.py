@@ -42,6 +42,20 @@ async def start_scan(req: ScanRequest):
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
 
+@app.post("/api/mixhunter/start")
+async def start_mixhunter(workers: int = 2):
+    if not orchestrator or not orchestrator.mixhunter:
+        return {"error": "MixHunter not available"}
+    orchestrator.mixhunter.start(num_workers=workers)
+    return {"status": "started"}
+
+@app.post("/api/mixhunter/stop")
+async def stop_mixhunter():
+    if not orchestrator or not orchestrator.mixhunter:
+        return {"error": "MixHunter not available"}
+    orchestrator.mixhunter.stop()
+    return {"status": "stopped"}
+
 @app.post("/api/scan/stop")
 async def stop_scan():
     if not orchestrator or not orchestrator.computer_scanner:
