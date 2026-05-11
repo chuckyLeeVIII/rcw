@@ -17,7 +17,6 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { SUPPORTED_NETWORKS } from '../types/recoveryPool';
-import { RecoveryAIAssistant } from '../components/RecoveryAIAssistant';
 
 export function RecoveryPoolPage() {
   const recoveryPool = useRecoveryPool();
@@ -358,8 +357,6 @@ export function RecoveryPoolPage() {
         </div>
       )}
 
-      {/* AI Assistant */}
-      <RecoveryAIAssistant />
     </div>
   );
 }
