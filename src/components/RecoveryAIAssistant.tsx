@@ -42,8 +42,8 @@ export function RecoveryAIAssistant() {
 
         if (statusData.computer_scanner) setIsScannerRunning(statusData.computer_scanner.running);
         if (statusData.agents) {
-            setIsMixHunterRunning(statusData.agents.mixhunter.running);
-            setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
+            if (statusData.agents.mixhunter) setIsMixHunterRunning(statusData.agents.mixhunter.running);
+            if (statusData.agents.screen_watcher) setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
         }
       } catch (err) {
         console.error('Intelligence poll failure:', err);
@@ -77,11 +77,20 @@ export function RecoveryAIAssistant() {
         });
       } catch (err) { console.error(err); }
     } else {
+      // Feed to backend for key extraction
+      try {
+        await fetch('http://127.0.0.1:8000/api/assistant/feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: input, source: 'ai_chat' }),
+        });
+      } catch (err) { console.error(err); }
+
       // General context analysis
       const rec = generateRecoveryRecommendation(chatInput);
       setMessages(prev => [...prev, {
         type: 'ai',
-        text: `ANALYSIS_COMPLETE: Confidence ${rec.confidence.toUpperCase()}. Suggested paths: ${rec.derivationPaths.slice(0, 3).join(', ')}...`,
+        text: `ANALYSIS_COMPLETE: Confidence ${rec.confidence.toUpperCase()}. Feeding to extraction engine. Suggested paths: ${rec.derivationPaths.slice(0, 3).join(', ')}...`,
         time: new Date()
       }]);
     }
@@ -125,6 +134,16 @@ export function RecoveryAIAssistant() {
     for (const file of files) {
       try {
         const text = await file.text();
+
+        // Feed to backend for key extraction
+        try {
+          await fetch('http://127.0.0.1:8000/api/assistant/feed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, source: `file:${file.name}` }),
+          });
+        } catch (err) { console.error(err); }
+
         const parsed = parseWalletFile(text, file.name);
         const count = parsed.keys.length + parsed.seeds.length + parsed.shards.length + parsed.passwords.length;
         setMessages(prev => [...prev, {
@@ -132,7 +151,6 @@ export function RecoveryAIAssistant() {
           text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. Adding to recovery pool...`,
           time: new Date()
         }]);
-        // Implementation for feeding to pool would go here
       } catch (err) {
         setMessages(prev => [...prev, { type: 'ai', text: `ERROR: Failed to parse ${file.name}`, time: new Date() }]);
       }

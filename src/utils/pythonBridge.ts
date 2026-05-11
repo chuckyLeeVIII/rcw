@@ -1,12 +1,31 @@
 import { Buffer } from 'buffer';
 
-// Placeholder for Python bridge functionality
+const API_BASE = 'http://127.0.0.1:8000/api';
+
 export async function initPython() {
-  console.warn('Python bridge functionality is currently disabled');
-  return null;
+  try {
+    const res = await fetch(`${API_BASE}/status`);
+    return await res.json();
+  } catch (err) {
+    console.error('Failed to init Python bridge:', err);
+    return null;
+  }
 }
 
-export async function recoverWallet(walletData: any) {
-  console.warn('Python wallet recovery is currently disabled');
-  throw new Error('Python wallet recovery is not available in this environment');
+export async function recoverWallet(walletData: { text: string; source?: string; context?: string }) {
+  try {
+    const res = await fetch(`${API_BASE}/assistant/feed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: walletData.text,
+        source: walletData.source || 'manual_recovery',
+        context: walletData.context || ''
+      }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Python wallet recovery failed:', err);
+    throw err;
+  }
 }

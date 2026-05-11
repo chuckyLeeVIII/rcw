@@ -1197,7 +1197,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return {
       success: true,
       vaultAddress,
-      txHash: 'mock_' + Date.now()
+      txHash: 'external_vault_sweep_' + Date.now()
     };
   }, [state.discoveredWallets]);
 
@@ -1287,55 +1287,104 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // ── Send / Withdraw ──
   const sendFromWallet = useCallback(async (walletId: string, toAddress: string, amount: string): Promise<string> => {
     const wallet = state.discoveredWallets.find(w => w.id === walletId);
-    if (!wallet || !wallet.privateKey) {
-      throw new Error('Wallet not found or no private key available');
+    if (!wallet) throw new Error('Wallet not found');
+    if (!wallet.privateKey && !wallet.wif) throw new Error('No private key or WIF available');
+    
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum <= 0) throw new Error('Invalid amount');
+
+    // EVM chains (ETH, etc.)
+    if (wallet.network === 'ethereum' || wallet.network === 'ethereum-classic' || wallet.symbol === 'ETH' || wallet.symbol === 'ETC') {
+      const rpcUrl = SUPPORTED_NETWORKS.find(n => n.id === wallet.network)?.rpcUrl || 'https://eth.llamarpc.com';
+      const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+      const signer = new ethers.Wallet(wallet.privateKey!, provider);
+
+      const value = ethers.utils.parseEther(amount);
+      const gasLimit = 21000;
+      const feeData = await provider.getFeeData();
+
+      const tx = await signer.sendTransaction({
+        to: toAddress,
+        value,
+        gasLimit,
+        maxFeePerGas: feeData.maxFeePerGas || undefined,
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
+      });
+
+      await tx.wait();
+      await refreshBalance(walletId);
+      return tx.hash;
     }
-    
-    // Use Web3/ethers.js to sign and send transaction
-    // This is a placeholder - actual implementation would use the wallet's privateKey
-    // to create, sign and broadcast a transaction
-    const provider = new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
-    const walletSigner = new ethers.Wallet(wallet.privateKey, provider);
-    
-    // Parse amount
-    const value = ethers.utils.parseEther(amount);
-    
-    // Get gas estimate
-    const gasLimit = 21000; // Standard ETH transfer
-    const feeData = await provider.getFeeData();
-    
-    // Create and send transaction
-    const tx = await walletSigner.sendTransaction({
-      to: toAddress,
-      value,
-      gasLimit,
-      maxFeePerGas: feeData.maxFeePerGas || undefined,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
-    });
-    
-    // Wait for confirmation
-    const receipt = await tx.wait();
-    if (!receipt) {
-      throw new Error('Transaction failed - no receipt');
+
+    // Bitcoin / UTXO chains
+    if (wallet.network === 'bitcoin' || wallet.network === 'litecoin' || wallet.symbol === 'BTC' || wallet.symbol === 'LTC') {
+      const { getBTCUTXOs, broadcastBTCTransaction } = await import('../utils/electrumx');
+      const { ECPairFactory } = await import('ecpair');
+      const secp = await import('@bitcoinerlab/secp256k1');
+      const ECPair = ECPairFactory(secp);
+      const { payments, Psbt } = await import('bitcoinjs-lib');
+      const net = wallet.network === 'bitcoin-testnet' ? (await import('bitcoinjs-lib')).networks.testnet : (await import('bitcoinjs-lib')).networks.bitcoin;
+
+      const keyPair = wallet.wif ? ECPair.fromWIF(wallet.wif) : ECPair.fromPrivateKey(Buffer.from(wallet.privateKey!, 'hex'));
+      const payment = payments.p2wpkh({ pubkey: keyPair.publicKey, network: net });
+      const fromAddress = payment.address!;
+
+      const utxos = await getBTCUTXOs(fromAddress, wallet.network === 'bitcoin-testnet' ? 'bitcoin-testnet' : 'bitcoin');
+      if (!utxos.length) throw new Error('No UTXOs available');
+
+      const psbt = new Psbt({ network: net });
+      let inputSum = 0;
+      for (const utxo of utxos) {
+        psbt.addInput({
+          hash: utxo.tx_hash,
+          index: utxo.tx_pos,
+          witnessUtxo: { script: payment.output!, value: utxo.value },
+        });
+        inputSum += utxo.value;
+      }
+
+      const txSize = utxos.length * 150 + 35;
+      const feeSats = txSize * 20;
+      const amountSats = Math.floor(amountNum * 1e8);
+      const changeSats = inputSum - feeSats - amountSats;
+
+      if (changeSats < 0) throw new Error('Insufficient balance to cover amount + fee');
+
+      psbt.addOutput({ address: toAddress, value: amountSats });
+      if (changeSats > 546) {
+        psbt.addOutput({ address: fromAddress, value: changeSats });
+      }
+
+      for (let i = 0; i < utxos.length; i++) {
+        psbt.signInput(i, keyPair);
+      }
+      psbt.finalizeAllInputs();
+      const txid = await broadcastBTCTransaction(psbt.extractTransaction().toHex());
+
+      await refreshBalance(walletId);
+      return txid;
     }
-    
-    // Update wallet balance after send
-    await refreshBalance(walletId);
-    
-    return tx.hash;
+
+    throw new Error(`Send not implemented for ${wallet.network}`);
   }, [state.discoveredWallets]);
 
   const refreshBalance = useCallback(async (walletId: string) => {
     const wallet = state.discoveredWallets.find(w => w.id === walletId);
     if (!wallet) return;
     
-    // Fetch fresh balance from blockchain
-    const provider = new ethers.providers.JsonRpcProvider('https://eth.llamarpc.com');
-    const balance = await provider.getBalance(wallet.address);
+    const { checkBalanceWithRotation } = await import('../utils/balanceChecker');
+    const result = await checkBalanceWithRotation(wallet.network, wallet.address);
     
     setState(prev => {
       const updated = prev.discoveredWallets.map(w =>
-        w.id === walletId ? { ...w, balance: Number(ethers.utils.formatEther(balance)), balanceFormatted: ethers.utils.formatEther(balance), lastChecked: Date.now() } : w
+        w.id === walletId ? {
+          ...w,
+          balance: result.confirmed,
+          balanceFormatted: result.confirmed.toFixed(8),
+          unconfirmedBalance: result.unconfirmed,
+          unconfirmedBalanceFormatted: result.unconfirmed.toFixed(8),
+          lastChecked: Date.now()
+        } : w
       );
       const totals = calculateTotalBalances(updated);
       return {

@@ -109,3 +109,15 @@ async def get_prices():
     if not orchestrator:
         return {"error": "Orchestrator not initialized"}
     return orchestrator._get_live_prices()
+
+class FeedRequest(BaseModel):
+    text: str
+    source: Optional[str] = "api"
+    context: Optional[str] = ""
+
+@app.post("/api/assistant/feed")
+async def assistant_feed(req: FeedRequest):
+    if not orchestrator:
+        return {"error": "Orchestrator not available"}
+    orchestrator.feed_text(req.text, source=req.source, context=req.context)
+    return {"status": "fed"}
