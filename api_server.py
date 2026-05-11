@@ -24,6 +24,7 @@ class ScanRequest(BaseModel):
     workers: int = 4
     deep_scan: bool = True
     check_balances: bool = True
+    recovery_tokens: Optional[List[str]] = None
 
 @app.get("/api/status")
 async def get_status():
@@ -42,6 +43,9 @@ async def start_scan(req: ScanRequest):
     if req.richlist:
         orchestrator.computer_scanner.richlist_path = req.richlist
         orchestrator.computer_scanner._load_richlist()
+
+    if req.recovery_tokens:
+        orchestrator.computer_scanner.btc_recover_tokens = req.recovery_tokens
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
