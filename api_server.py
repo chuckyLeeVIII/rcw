@@ -46,25 +46,6 @@ async def start_scan(req: ScanRequest):
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
 
-@app.post("/api/mixhunter/start")
-async def start_mixhunter(workers: int = 2):
-    if not orchestrator or not orchestrator.mixhunter:
-        return {"error": "MixHunter not available"}
-    try:
-        orchestrator.mixhunter.start(num_workers=workers)
-        return {"status": "started"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/mixhunter/stop")
-async def stop_mixhunter():
-    if not orchestrator or not orchestrator.mixhunter:
-        return {"error": "MixHunter not available"}
-    try:
-        orchestrator.mixhunter.stop()
-        return {"status": "stopped"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 @app.post("/api/scan/stop")
 async def stop_scan():
@@ -73,6 +54,16 @@ async def stop_scan():
     try:
         orchestrator.computer_scanner.stop()
         return {"status": "stopped"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/screenwatcher/snapshot")
+async def screenwatcher_snapshot():
+    if not orchestrator or not orchestrator.screen_watcher:
+        return {"error": "ScreenWatcher not available"}
+    try:
+        orchestrator.screen_watcher._capture_and_scan(force=True)
+        return {"status": "snapshot_taken"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

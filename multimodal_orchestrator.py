@@ -23,7 +23,6 @@ import time
 from guardian.subagents.key_reducer import KeyReducerAgent, KeyFound
 from guardian.subagents.computer_scanner import ComputerScannerAgent, ScanHit
 from guardian.subagents.screen_watcher import ScreenWatcherAgent
-from guardian.subagents.mixhunter import MixHunterEngine
 from vault.service import Vault
 
 # Common high-value ERC20 tokens for discovery enrichment
@@ -217,7 +216,6 @@ class MultimodalOrchestrator:
         self.key_reducer: Optional[KeyReducerAgent] = None
         self.computer_scanner: Optional[ComputerScannerAgent] = None
         self.screen_watcher: Optional[ScreenWatcherAgent] = None
-        self.mixhunter: Optional[MixHunterEngine] = None
         
         # State
         self._running = False
@@ -335,7 +333,6 @@ class MultimodalOrchestrator:
         self._setup_key_reducer()
         self._setup_computer_scanner()
         self.screen_watcher = ScreenWatcherAgent(assistant=self)
-        self.mixhunter = MixHunterEngine(assistant=self)
         
         self._running = True
         self._stats['start_time'] = time.time()
@@ -352,10 +349,6 @@ class MultimodalOrchestrator:
         # Start ScreenWatcher
         if self.screen_watcher:
             self.screen_watcher.start()
-
-        # Start MixHunter (optional based on config)
-        if self.config.get('mixhunter', {}).get('enabled', False):
-            self.mixhunter.start(num_workers=self.config['mixhunter'].get('workers', 2))
         
         # Start ComputerScanner (idle until explicitly started via API/CLI)
         if self.computer_scanner:
@@ -387,9 +380,6 @@ class MultimodalOrchestrator:
 
         if self.screen_watcher:
             self.screen_watcher.stop()
-
-        if self.mixhunter:
-            self.mixhunter.stop()
         
         for t in self._threads:
             t.join(timeout=2)
@@ -549,7 +539,6 @@ class MultimodalOrchestrator:
             'agents': {
                 'key_reducer': {'running': self.key_reducer.is_running if self.key_reducer else False},
                 'screen_watcher': {'running': self.screen_watcher._running if self.screen_watcher else False},
-                'mixhunter': {'running': self.mixhunter._running if self.mixhunter else False},
             }
         }
         
