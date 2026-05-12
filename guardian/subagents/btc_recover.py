@@ -1,10 +1,10 @@
 import hashlib
 import itertools
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Set
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins,
     WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
-    P2PKHAddr, Bip32Secp256k1
+    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter
 )
 
 def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
@@ -17,10 +17,12 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
         p2pkh = bip44_ctx.PublicKey().ToAddress()
 
         # Legacy (P2PKH) - Uncompressed
-        # Bip44 internally uses compressed. For uncompressed we use raw keys.
         bip32_ctx = Bip32Secp256k1.FromPrivateKey(priv_bytes)
         pub_key_bytes_uncomp = bip32_ctx.PublicKey().RawUncompressed().ToBytes()
-        p2pkh_uncomp = P2PKHAddr.Encode(pub_key_bytes_uncomp)
+
+        # Clean API for NetVer access
+        net_ver = Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('net_ver')
+        p2pkh_uncomp = P2PKHAddr.EncodeKey(pub_key_bytes_uncomp, net_ver=net_ver)
 
         # Nested SegWit (P2SH-P2WPKH)
         bip49_ctx = Bip49.FromPrivateKey(priv_bytes, Bip49Coins.BITCOIN)
@@ -50,13 +52,12 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
                 'btc_nested': p2sh_p2wpkh
             }
         }
-    except Exception as e:
+    except Exception:
         return None
 
 def btc_from_wif(wif: str) -> Optional[Dict[str, str]]:
     """Decode WIF to hex and derive addresses"""
     try:
-        # WifDecoder.Decode returns bytes if it's a newer version or a tuple (bytes, pub_key_mode)
         decoded = WifDecoder.Decode(wif)
         if isinstance(decoded, tuple):
             priv_bytes = decoded[0]
@@ -71,66 +72,120 @@ def btc_from_wif(wif: str) -> Optional[Dict[str, str]]:
     except Exception:
         return None
 
+def generate_typos(token: str) -> Set[str]:
+    """Generate character-level mutations for a token"""
+    typos = {token}
+    chars = list(token)
+
+    # 1. Omissions
+    for i in range(len(chars)):
+        typos.add("".join(chars[:i] + chars[i+1:]))
+
+    # 2. Swaps
+    for i in range(len(chars) - 1):
+        c2 = chars[:]
+        c2[i], c2[i+1] = c2[i+1], c2[i]
+        typos.add("".join(c2))
+
+    # 3. Common Substitutions
+    subs = {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e', 'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't'}
+    for i, c in enumerate(chars):
+        if c.lower() in subs:
+            c2 = chars[:]
+            c2[i] = subs[c.lower()]
+            typos.add("".join(c2))
+
+    return typos
+
+def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
+    """Generate token combinations and case variations"""
+    perms = set()
+    base_tokens = []
+    for t in tokens:
+        base_tokens.extend([t, t.lower(), t.upper(), t.capitalize()])
+
+    base_tokens = list(set(base_tokens))
+    for length in range(1, min(len(base_tokens), max_len) + 1):
+        for combo in itertools.permutations(base_tokens, length):
+            perms.add("".join(combo))
+    return perms
+
 def run_btcrecover_scan(
     wallet_file: str = None,
     passwords: List[str] = None,
     tokenlist: List[str] = None,
-    target_addresses: List[str] = None
+    target_addresses: List[str] = None,
+    exhaustive: bool = False
 ) -> Dict:
     """
-    Real BTCRecover-style password recovery logic.
-    Supports:
-    - Password list scanning
-    - Token-based password construction (simple version)
-    - Target address matching
+    Exhaustive BTC recovery logic.
     """
-    print(f"[BTCRecover] Starting scan. Target addresses: {len(target_addresses or [])}")
+    results = {"found": False, "attempts": 0, "matches": []}
+    targets = set(target_addresses or [])
 
-    if not targets and not exhaustive:
+    if not targets:
         return results
 
-    # Simple token expansion if tokenlist provided
-    if tokenlist and len(tokenlist) <= 5: # Limit for safety
-        for length in range(1, 3):
-            for combo in itertools.permutations(tokenlist, length):
-                candidates.add("".join(combo))
+    candidates = set(passwords or [])
 
-    results = {"found": False, "attempts": 0, "matches": []}
+    if tokenlist:
+        if exhaustive:
+            # Deep search with typos and permutations
+            for token in tokenlist:
+                candidates.update(generate_typos(token))
+            candidates.update(generate_permutations(list(candidates), max_len=2))
+        else:
+            # Simple permutations
+            candidates.update(generate_permutations(tokenlist, max_len=2))
 
     for pwd in candidates:
+        if not pwd: continue
         results["attempts"] += 1
-        # In a real wallet.dat scenario, we would try to decrypt the master key here.
-        # Since we're in a general recovery tool, we'll try hashing the pwd as a potential seed/key
 
-        # 1. Try pwd as mnemonic
+        # Check potential candidates
+        potential_keys = []
+
+        # 1. As mnemonic
         if Bip39MnemonicValidator().IsValid(pwd):
-            seed = Bip39SeedGenerator(pwd).Generate()
-            # Deriving first address to check
-            ctx = Bip84.FromSeed(seed, Bip84Coins.BITCOIN).DeriveDefaultPath()
-            addr = ctx.PublicKey().ToAddress()
-            if target_addresses and addr in target_addresses:
-                results["found"] = True
-                results["matches"].append({"type": "mnemonic", "value": pwd, "address": addr})
-                return results
+            try:
+                seed = Bip39SeedGenerator(pwd).Generate()
+                # Derive common paths
+                for coin in [Bip44Coins.BITCOIN, Bip49Coins.BITCOIN, Bip84Coins.BITCOIN]:
+                    if coin == Bip44Coins.BITCOIN: ctx = Bip44.FromSeed(seed, coin)
+                    elif coin == Bip49Coins.BITCOIN: ctx = Bip49.FromSeed(seed, coin)
+                    else: ctx = Bip84.FromSeed(seed, coin)
 
-        # 2. Try pwd as raw private key (if it's hex)
+                    addr = ctx.DeriveDefaultPath().PublicKey().ToAddress()
+                    if addr in targets:
+                        results["found"] = True
+                        results["matches"].append({"type": "mnemonic", "value": pwd, "address": addr})
+            except: pass
+
+        # 2. As raw hex key
         if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
-            res = btc_from_hex(pwd)
+            potential_keys.append(pwd)
+
+        # 3. As WIF
+        res_wif = btc_from_wif(pwd)
+        if res_wif:
+            for addr in res_wif['addresses'].values():
+                if addr in targets:
+                    results["found"] = True
+                    results["matches"].append({"type": "wif", "value": pwd, "address": addr})
+
+        # 4. As password hash
+        hashed_key = hashlib.sha256(pwd.encode()).hexdigest()
+        potential_keys.append(hashed_key)
+
+        for k in potential_keys:
+            res = btc_from_hex(k)
             if res:
                 for addr in res['addresses'].values():
-                    if target_addresses and addr in target_addresses:
+                    if addr in targets:
                         results["found"] = True
-                        results["matches"].append({"type": "hex_key", "value": pwd, "address": addr})
-                        return results
+                        results["matches"].append({"type": "private_key", "value": pwd, "address": addr, "hex": k})
 
-        # 3. Simple hash-based key derivation (common in some old scripts)
-        hashed_key = hashlib.sha256(pwd.encode()).hexdigest()
-        res = btc_from_hex(hashed_key)
-        if res:
-            for addr in res['addresses'].values():
-                if target_addresses and addr in target_addresses:
-                    results["found"] = True
-                    results["matches"].append({"type": "password_hash", "value": pwd, "address": addr})
-                    return results
+        if results["found"] and not exhaustive:
+            break
 
     return results
