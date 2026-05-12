@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Bot, Sparkles, Upload, Activity, Search, Send, Terminal, Shield, Zap, Target, User } from 'lucide-react';
+import { Bot, Sparkles, Upload, Activity, Search, Send, Terminal, Shield, Zap, Target, User, ChevronRight, Settings, Info } from 'lucide-react';
 import { useRecoveryPool } from '../context/RecoveryPoolContext';
 import { parseWalletFile, generateRecoveryRecommendation } from '../utils/recoveryAssistant';
 import { getApiUrl } from '../utils/apiConfig';
@@ -11,12 +11,17 @@ export function RecoveryAIAssistant() {
   const [isMixHunterRunning, setIsMixHunterRunning] = useState(false);
   const [isScannerRunning, setIsScannerRunning] = useState(false);
   const [isScreenWatcherRunning, setIsScreenWatcherRunning] = useState(false);
+
+  const [isDeepSearchEnabled, setIsDeepSearchEnabled] = useState(false);
+  const [recoveryTokens, setRecoveryTokens] = useState('');
+  const [recoveryAttempts, setRecoveryAttempts] = useState(0);
+  const [recoveryMatches, setRecoveryMatches] = useState(0);
+
   const [messages, setMessages] = useState<any[]>([
     { type: 'ai', text: 'SYSTEM READY. Provide recovery context, target addresses, or drag-and-drop wallet artifacts to begin deep-state analysis.', time: new Date() }
   ]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Intelligence Feed Polling
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -41,10 +46,14 @@ export function RecoveryAIAssistant() {
           });
         }
 
-        if (statusData.computer_scanner) setIsScannerRunning(statusData.computer_scanner.running);
+        if (statusData.computer_scanner) {
+          setIsScannerRunning(statusData.computer_scanner.running);
+          setRecoveryAttempts(statusData.computer_scanner.recovery_attempts || 0);
+          setRecoveryMatches(statusData.computer_scanner.recovery_matches || 0);
+        }
         if (statusData.agents) {
-            setIsMixHunterRunning(statusData.agents.mixhunter.running);
-            setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
+            setIsMixHunterRunning(statusData.agents.mixhunter?.running || false);
+            setIsScreenWatcherRunning(statusData.agents.screen_watcher?.running || false);
         }
       } catch (err) {
         console.error('Intelligence poll failure:', err);
@@ -74,11 +83,15 @@ export function RecoveryAIAssistant() {
         await fetch(getApiUrl('/scan/start'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paths: ['/home/jules'], richlist: input }),
+          body: JSON.stringify({
+            paths: ['/home/jules'],
+            richlist: input,
+            deep_scan: isDeepSearchEnabled,
+            recovery_tokens: recoveryTokens ? recoveryTokens.split(',').map(t => t.trim()) : []
+          }),
         });
       } catch (err) { console.error(err); }
     } else {
-      // General context analysis
       const rec = generateRecoveryRecommendation(chatInput);
       setMessages(prev => [...prev, {
         type: 'ai',
@@ -95,7 +108,8 @@ export function RecoveryAIAssistant() {
       const endpoint = isScannerRunning ? 'stop' : 'start';
       const body = isScannerRunning ? undefined : JSON.stringify({
         paths: ['/home/jules'],
-        deep_scan: isDeepSearchEnabled
+        deep_scan: isDeepSearchEnabled,
+        recovery_tokens: recoveryTokens ? recoveryTokens.split(',').map(t => t.trim()) : []
       });
       const res = await fetch(getApiUrl(`/scan/${endpoint}`), {
         method: 'POST',
@@ -136,7 +150,6 @@ export function RecoveryAIAssistant() {
           text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. Adding to recovery pool...`,
           time: new Date()
         }]);
-        // Implementation for feeding to pool would go here
       } catch (err) {
         setMessages(prev => [...prev, { type: 'ai', text: `ERROR: Failed to parse ${file.name}`, time: new Date() }]);
       }
@@ -144,50 +157,78 @@ export function RecoveryAIAssistant() {
   }, []);
 
   return (
-    <div className="flex flex-col h-[700px] bg-[#050810] border border-cyan-500/30 rounded-xl overflow-hidden relative shadow-[0_0_50px_rgba(6,182,212,0.1)]">
-      {/* Cyberpunk Scanlines & Overlay */}
-      <div className="absolute inset-0 pointer-events-none opacity-5 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
+    <div className="flex flex-col h-full bg-[#050810]/80 border border-cyan-500/30 rounded-3xl overflow-hidden relative shadow-[0_0_80px_rgba(6,182,212,0.1)] backdrop-blur-xl">
+      <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
 
       {/* Header */}
-      <div className="bg-cyan-950/20 border-b border-cyan-500/20 p-4 flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-cyan-500/10 rounded-lg border border-cyan-500/30">
-            <Bot className="w-6 h-6 text-cyan-400" />
+      <div className="bg-cyan-950/20 border-b border-cyan-500/20 p-6 flex items-center justify-between z-10">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-cyan-500/10 rounded-2xl border border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.2)]">
+            <Bot className="w-8 h-8 text-cyan-400" />
           </div>
           <div>
-            <h3 className="font-bold text-cyan-400 tracking-widest text-sm uppercase">Recovery_Core_v4.2</h3>
+            <h3 className="font-bold text-cyan-400 tracking-[0.2em] text-lg uppercase">Recovery AI Terminal</h3>
             <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-              <span className="text-[10px] text-emerald-400 font-mono">NEURAL_LINK_ESTABLISHED</span>
+              <span className={`w-2 h-2 rounded-full animate-pulse ${isScannerRunning ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span className={`text-xs font-mono tracking-wider ${isScannerRunning ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {isScannerRunning ? 'ACTIVE_SCAN_IN_PROGRESS' : 'NEURAL_LINK_IDLE'}
+              </span>
             </div>
           </div>
         </div>
-        <div className="flex gap-4">
-           <div className="text-right hidden md:block">
-              <div className="text-[10px] text-cyan-700 font-mono">LATENCY: 24ms</div>
-              <div className="text-[10px] text-cyan-700 font-mono">UPTIME: 99.99%</div>
+        <div className="flex gap-8 items-center">
+           <div className="text-right hidden md:block border-r border-cyan-500/20 pr-8">
+              <div className="text-xs text-cyan-700 font-mono">ATTEMPTS: {recoveryAttempts.toLocaleString()}</div>
+              <div className="text-xs text-emerald-700 font-mono">MATCHES: {recoveryMatches}</div>
            </div>
-           <Shield className="w-5 h-5 text-cyan-900" />
+           <div className="flex gap-4">
+             <Info className="w-6 h-6 text-cyan-900 hover:text-cyan-400 cursor-pointer transition-colors" />
+             <Settings className="w-6 h-6 text-cyan-900 hover:text-cyan-400 cursor-pointer transition-colors" />
+             <Shield className="w-6 h-6 text-cyan-950" />
+           </div>
+        </div>
+      </div>
+
+      {/* Configuration Strip */}
+      <div className="bg-black/60 border-b border-cyan-500/10 p-4 flex flex-wrap gap-6 items-center z-10">
+        <div className="flex items-center gap-3 bg-cyan-500/5 px-4 py-2 rounded-xl border border-cyan-500/10">
+          <span className="text-xs text-cyan-600 font-bold uppercase tracking-widest">Deep Engine:</span>
+          <button
+            onClick={() => setIsDeepSearchEnabled(!isDeepSearchEnabled)}
+            className={`w-10 h-5 rounded-full relative transition-all duration-300 ${isDeepSearchEnabled ? 'bg-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'bg-gray-800'}`}
+          >
+            <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all duration-300 ${isDeepSearchEnabled ? 'left-6' : 'left-1'}`} />
+          </button>
+        </div>
+        <div className="flex-1 min-w-[300px] flex items-center gap-3 bg-black/40 border border-cyan-500/20 rounded-xl px-4 py-2 focus-within:border-cyan-500/50 transition-all">
+          <Target className="w-4 h-4 text-cyan-600" />
+          <input
+            type="text"
+            placeholder="RECOVERY_TOKENS (comma separated variants)..."
+            value={recoveryTokens}
+            onChange={(e) => setRecoveryTokens(e.target.value)}
+            className="bg-transparent border-none outline-none text-xs text-cyan-300 placeholder-cyan-900 w-full font-mono tracking-tight"
+          />
         </div>
       </div>
 
       {/* Messages Window */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 font-mono z-10 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-8 space-y-6 font-mono z-10 custom-scrollbar">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-lg p-3 ${
+            <div className={`max-w-[80%] rounded-2xl p-4 shadow-2xl ${
               m.type === 'user'
                 ? 'bg-cyan-500/10 border border-cyan-500/40 text-cyan-100'
                 : m.type === 'hit'
-                  ? 'bg-amber-500/10 border border-amber-500/40 text-amber-400 text-xs animate-in fade-in slide-in-from-left-2'
-                  : 'bg-gray-900/60 border border-gray-800 text-cyan-300 text-sm'
+                  ? 'bg-amber-500/10 border border-amber-500/40 text-amber-400 text-xs animate-in fade-in slide-in-from-left-4'
+                  : 'bg-gray-900/60 border border-gray-800 text-cyan-300 text-[13px] leading-relaxed'
             }`}>
-              <div className="flex items-center gap-2 mb-1 opacity-50 text-[10px]">
-                {m.type === 'user' ? <User className="w-3 h-3" /> : <Terminal className="w-3 h-3" />}
+              <div className="flex items-center gap-2 mb-2 opacity-40 text-[10px] tracking-tighter">
+                {m.type === 'user' ? <User className="w-3.5 h-3.5" /> : <Terminal className="w-3.5 h-3.5" />}
                 <span>{m.time.toLocaleTimeString()}</span>
               </div>
-              <p className="whitespace-pre-wrap leading-relaxed">
-                {m.type === 'hit' && <span className="bg-amber-400 text-black px-1 mr-2 font-bold uppercase text-[9px]">Alert</span>}
+              <p className="whitespace-pre-wrap">
+                {m.type === 'hit' && <span className="bg-amber-400 text-black px-1.5 py-0.5 mr-3 font-black uppercase text-[10px] rounded shadow-lg">Detection</span>}
                 {m.text}
               </p>
             </div>
@@ -196,44 +237,45 @@ export function RecoveryAIAssistant() {
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input Zone */}
-      <div className="p-4 bg-cyan-950/10 border-t border-cyan-500/20 z-10">
-        <div className="flex gap-3 items-end">
+      {/* Footer Input Area */}
+      <div className="p-6 bg-cyan-950/10 border-t border-cyan-500/20 z-10">
+        <div className="flex gap-4 items-end max-w-4xl mx-auto">
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragActive(true); }}
             onDragLeave={() => setIsDragActive(false)}
             onDrop={(e) => { e.preventDefault(); setIsDragActive(false); processFiles(Array.from(e.dataTransfer.files)); }}
-            className={`p-3 rounded-lg border-2 border-dashed transition-all cursor-pointer flex-shrink-0 ${
+            className={`p-4 rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer flex-shrink-0 ${
               isDragActive ? 'border-cyan-400 bg-cyan-500/20' : 'border-gray-800 hover:border-cyan-500/30 bg-black/40'
             }`}
           >
-            <Upload className={`w-6 h-6 ${isDragActive ? 'text-cyan-300 animate-bounce' : 'text-gray-600'}`} />
+            <Upload className={`w-7 h-7 ${isDragActive ? 'text-cyan-300 animate-bounce' : 'text-gray-700'}`} />
             <input type="file" multiple className="hidden" id="chat-file-upload" onChange={(e) => processFiles(Array.from(e.target.files || []))} />
           </div>
 
-          <div className="flex-1 relative">
+          <div className="flex-1 relative group">
             <textarea
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder="ENTER_CONTEXT_OR_TARGET_ADDRESS..."
-              className="w-full bg-black/60 border border-gray-800 rounded-xl px-4 py-3 text-cyan-300 placeholder-cyan-900 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 font-mono text-sm resize-none h-12 min-h-[48px]"
+              placeholder="ENTER_INTEL_OR_TARGET_ADDR..."
+              className="w-full bg-black/80 border border-gray-800 rounded-2xl px-6 py-4 text-cyan-300 placeholder-cyan-950 focus:outline-none focus:border-cyan-500/50 focus:ring-4 focus:ring-cyan-500/5 font-mono text-sm resize-none h-14 min-h-[56px] transition-all group-hover:border-gray-700 shadow-inner"
             />
           </div>
 
           <button
             onClick={handleSend}
             disabled={!chatInput.trim()}
-            className="p-3 bg-cyan-500/20 border border-cyan-500/40 rounded-xl text-cyan-400 hover:bg-cyan-500/30 hover:text-cyan-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            className="p-4 bg-cyan-500/20 border border-cyan-500/40 rounded-2xl text-cyan-400 hover:bg-cyan-500/30 hover:text-cyan-300 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(6,182,212,0.1)] active:scale-95"
           >
-            <Send className="w-6 h-6" />
+            <Send className="w-7 h-7" />
           </button>
         </div>
-        <div className="mt-3 flex gap-4 overflow-x-auto pb-1 text-[9px] font-mono text-cyan-900 uppercase tracking-widest">
-           <div className={`flex items-center gap-1 cursor-pointer hover:text-purple-400 ${isMixHunterRunning ? 'text-purple-400' : ''}`} onClick={toggleMixHunter}><Zap className="w-3 h-3" /> MixHunter: {isMixHunterRunning ? 'ACTIVE' : 'IDLE'}</div>
-           <div className={`flex items-center gap-1 cursor-pointer hover:text-emerald-400 ${isScreenWatcherRunning ? 'text-emerald-400' : ''}`} onClick={toggleScreenWatcher}><Activity className="w-3 h-3" /> ScreenWatcher: {isScreenWatcherRunning ? 'MONITORING' : 'IDLE'}</div>
-           <div className={`flex items-center gap-1 cursor-pointer hover:text-cyan-400 ${isScannerRunning ? 'text-cyan-400' : ''}`} onClick={toggleScanner}><Search className="w-3 h-3" /> Scanner: {isScannerRunning ? 'RUNNING' : 'IDLE'}</div>
-           <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>
+
+        {/* Rapid Actions Bar */}
+        <div className="mt-5 flex gap-6 overflow-x-auto pb-1 text-[10px] font-mono text-cyan-900 uppercase tracking-[0.2em] justify-center">
+           <div className={`flex items-center gap-2 cursor-pointer hover:text-purple-400 transition-colors ${isMixHunterRunning ? 'text-purple-400' : ''}`} onClick={toggleMixHunter}><Zap className="w-3.5 h-3.5" /> MixHunter: {isMixHunterRunning ? 'ON' : 'OFF'}</div>
+           <div className={`flex items-center gap-2 cursor-pointer hover:text-emerald-400 transition-colors ${isScreenWatcherRunning ? 'text-emerald-400' : ''}`} onClick={toggleScreenWatcher}><Activity className="w-3.5 h-3.5" /> ScreenWatch: {isScreenWatcherRunning ? 'ON' : 'OFF'}</div>
+           <div className={`flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors ${isScannerRunning ? 'text-cyan-400' : ''}`} onClick={toggleScanner}><Search className="w-3.5 h-3.5" /> SystemScan: {isScannerRunning ? 'ON' : 'OFF'}</div>
         </div>
       </div>
     </div>
