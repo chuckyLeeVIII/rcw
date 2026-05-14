@@ -11,6 +11,9 @@ export function RecoveryAIAssistant() {
   const [isMixHunterRunning, setIsMixHunterRunning] = useState(false);
   const [isScannerRunning, setIsScannerRunning] = useState(false);
   const [isScreenWatcherRunning, setIsScreenWatcherRunning] = useState(false);
+  const [isDeepSearchEnabled, setIsDeepSearchEnabled] = useState(false);
+  const [recoveryAttempts, setRecoveryAttempts] = useState(0);
+  const [recoveryMatches, setRecoveryMatches] = useState(0);
   const [messages, setMessages] = useState<any[]>([
     { type: 'ai', text: 'SYSTEM READY. Provide recovery context, target addresses, or drag-and-drop wallet artifacts to begin deep-state analysis.', time: new Date() }
   ]);
@@ -41,7 +44,11 @@ export function RecoveryAIAssistant() {
           });
         }
 
-        if (statusData.computer_scanner) setIsScannerRunning(statusData.computer_scanner.running);
+        if (statusData.computer_scanner) {
+          setIsScannerRunning(statusData.computer_scanner.running);
+          setRecoveryAttempts(statusData.computer_scanner.recovery_attempts || 0);
+          setRecoveryMatches(statusData.computer_scanner.recovery_matches || 0);
+        }
         if (statusData.agents) {
             setIsMixHunterRunning(statusData.agents.mixhunter.running);
             setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
@@ -74,7 +81,7 @@ export function RecoveryAIAssistant() {
         await fetch(getApiUrl('/scan/start'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paths: ['/home/jules'], richlist: input }),
+          body: JSON.stringify({ paths: ['.'], richlist: input }),
         });
       } catch (err) { console.error(err); }
     } else {
@@ -94,8 +101,12 @@ export function RecoveryAIAssistant() {
     try {
       const endpoint = isScannerRunning ? 'stop' : 'start';
       const body = isScannerRunning ? undefined : JSON.stringify({
-        paths: ['/home/jules'],
-        deep_scan: isDeepSearchEnabled
+        paths: ['.'],
+        deep_scan: isDeepSearchEnabled,
+        recovery_tokens: messages
+          .filter(m => m.type === 'user')
+          .slice(-3)
+          .map(m => m.text)
       });
       const res = await fetch(getApiUrl(`/scan/${endpoint}`), {
         method: 'POST',
@@ -155,7 +166,7 @@ export function RecoveryAIAssistant() {
             <Bot className="w-6 h-6 text-cyan-400" />
           </div>
           <div>
-            <h3 className="font-bold text-cyan-400 tracking-widest text-sm uppercase">Recovery_Core_v4.2</h3>
+            <h3 className="font-bold text-cyan-400 tracking-widest text-sm uppercase">Recovery_Core_v5.0</h3>
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-[10px] text-emerald-400 font-mono">NEURAL_LINK_ESTABLISHED</span>
@@ -233,7 +244,24 @@ export function RecoveryAIAssistant() {
            <div className={`flex items-center gap-1 cursor-pointer hover:text-purple-400 ${isMixHunterRunning ? 'text-purple-400' : ''}`} onClick={toggleMixHunter}><Zap className="w-3 h-3" /> MixHunter: {isMixHunterRunning ? 'ACTIVE' : 'IDLE'}</div>
            <div className={`flex items-center gap-1 cursor-pointer hover:text-emerald-400 ${isScreenWatcherRunning ? 'text-emerald-400' : ''}`} onClick={toggleScreenWatcher}><Activity className="w-3 h-3" /> ScreenWatcher: {isScreenWatcherRunning ? 'MONITORING' : 'IDLE'}</div>
            <div className={`flex items-center gap-1 cursor-pointer hover:text-cyan-400 ${isScannerRunning ? 'text-cyan-400' : ''}`} onClick={toggleScanner}><Search className="w-3 h-3" /> Scanner: {isScannerRunning ? 'RUNNING' : 'IDLE'}</div>
-           <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>
+           <div
+             className={`flex items-center gap-1 cursor-pointer hover:text-amber-400 transition-colors ${isDeepSearchEnabled ? 'text-amber-400' : 'text-cyan-900'}`}
+             onClick={() => setIsDeepSearchEnabled(!isDeepSearchEnabled)}
+           >
+             <Target className="w-3 h-3" /> Deep Search: {isDeepSearchEnabled ? 'ENABLED' : 'DISABLED'}
+           </div>
+
+           {(isScannerRunning || recoveryAttempts > 0) && (
+             <div className="flex items-center gap-3 ml-auto">
+               <div className="flex items-center gap-1 text-cyan-400">
+                 <Activity className="w-3 h-3" /> Attempts: {recoveryAttempts.toLocaleString()}
+               </div>
+               <div className={recoveryMatches > 0 ? "flex items-center gap-1 text-emerald-400 animate-pulse" : "flex items-center gap-1 text-gray-500"}>
+                 <Sparkles className="w-3 h-3" /> Matches: {recoveryMatches}
+               </div>
+             </div>
+           )}
+           {!isScannerRunning && !recoveryAttempts && <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>}
         </div>
       </div>
     </div>
