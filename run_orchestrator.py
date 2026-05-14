@@ -34,6 +34,8 @@ def parse_args():
     parser.add_argument('--richlist', type=str, help='Path to richlist.txt for address matching')
     parser.add_argument('--scan-workers', type=int, default=4, help='Scanner worker threads')
     parser.add_argument('--tokenlist', type=str, help='Path to btcrecover-style tokenlist for password recovery')
+    parser.add_argument('--deep-scan', action='store_true', help='Enable exhaustive deep search (char mutations, perms)')
+    parser.add_argument('--recovery-tokens', nargs='+', help='Tokens to use for exhaustive recovery search')
     
     # API Server args
     parser.add_argument('--api', action='store_true', help='Run FastAPI server')
@@ -77,6 +79,8 @@ def build_config(args) -> dict:
             'min_balance_usd': 0.0,
             'richlist_path': args.richlist,
             'tokenlist_path': args.tokenlist,
+            'deep_scan': args.deep_scan,
+            'btc_recover_tokens': args.recovery_tokens or [],
         },
         'balance_checkers': balance_checkers,
     }
