@@ -4,7 +4,7 @@ from typing import Dict, Optional, List, Set
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins,
     WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
-    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter
+    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes
 )
 
 def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
@@ -81,19 +81,38 @@ def generate_typos(token: str) -> Set[str]:
     for i in range(len(chars)):
         typos.add("".join(chars[:i] + chars[i+1:]))
 
-    # 2. Swaps
+    # 2. Swaps (adjacent and nearby)
     for i in range(len(chars) - 1):
         c2 = chars[:]
         c2[i], c2[i+1] = c2[i+1], c2[i]
         typos.add("".join(c2))
+        if i < len(chars) - 2:
+            c3 = chars[:]
+            c3[i], c3[i+2] = c3[i+2], c3[i]
+            typos.add("".join(c3))
 
     # 3. Common Substitutions
-    subs = {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e', 'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't'}
+    subs = {
+        'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
+        'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
+        'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'
+    }
     for i, c in enumerate(chars):
         if c.lower() in subs:
             c2 = chars[:]
             c2[i] = subs[c.lower()]
             typos.add("".join(c2))
+
+    # 4. Insertions (duplicate characters)
+    for i in range(len(chars)):
+        typos.add("".join(chars[:i] + [chars[i]] + chars[i:]))
+
+    # 5. Reversal
+    typos.add(token[::-1])
+
+    # 6. Visual mutations (m -> rn, etc)
+    if 'm' in token: typos.add(token.replace('m', 'rn'))
+    if 'rn' in token: typos.add(token.replace('rn', 'm'))
 
     return typos
 
@@ -107,6 +126,7 @@ def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
     base_tokens = list(set(base_tokens))
     for length in range(1, min(len(base_tokens), max_len) + 1):
         for combo in itertools.permutations(base_tokens, length):
+            perms.add(" ".join(combo))
             perms.add("".join(combo))
     return perms
 
@@ -131,11 +151,19 @@ def run_btcrecover_scan(
     if tokenlist:
         if exhaustive:
             # Deep search with typos and permutations
+            deep_tokens = set()
             for token in tokenlist:
-                candidates.update(generate_typos(token))
-            candidates.update(generate_permutations(list(candidates), max_len=2))
+                # If it looks like a whole mnemonic, don't generate per-character typos for the whole string
+                if len(token.split()) > 3:
+                    deep_tokens.add(token)
+                    # Mutation at word level could be added here if needed
+                else:
+                    deep_tokens.update(generate_typos(token))
+            candidates.update(deep_tokens)
+            candidates.update(generate_permutations(list(candidates), max_len=3))
         else:
             # Simple permutations
+            candidates.update(tokenlist)
             candidates.update(generate_permutations(tokenlist, max_len=2))
 
     for pwd in candidates:
@@ -146,20 +174,35 @@ def run_btcrecover_scan(
         potential_keys = []
 
         # 1. As mnemonic
-        if Bip39MnemonicValidator().IsValid(pwd):
-            try:
-                seed = Bip39SeedGenerator(pwd).Generate()
-                # Derive common paths
-                for coin in [Bip44Coins.BITCOIN, Bip49Coins.BITCOIN, Bip84Coins.BITCOIN]:
-                    if coin == Bip44Coins.BITCOIN: ctx = Bip44.FromSeed(seed, coin)
-                    elif coin == Bip49Coins.BITCOIN: ctx = Bip49.FromSeed(seed, coin)
-                    else: ctx = Bip84.FromSeed(seed, coin)
+        norm_pwd = " ".join(pwd.lower().split())
+        is_mnemonic = False
+        try:
+            is_mnemonic = Bip39MnemonicValidator().IsValid(norm_pwd)
+        except Exception:
+            pass
 
-                    addr = ctx.DeriveDefaultPath().PublicKey().ToAddress()
-                    if addr in targets:
-                        results["found"] = True
-                        results["matches"].append({"type": "mnemonic", "value": pwd, "address": addr})
-            except: pass
+        if is_mnemonic:
+            try:
+                seed = Bip39SeedGenerator(norm_pwd).Generate()
+                # Derive multiple indices for common paths
+                for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN)]:
+                    ctx = coin_cls.FromSeed(seed, coin_type)
+                    # Check first 20 addresses
+                    for i in range(20):
+                        try:
+                            # External
+                            addr = ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(i).PublicKey().ToAddress()
+                            if addr in targets:
+                                results["found"] = True
+                                results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr, "path_index": i, "chain": "external"})
+
+                            # Internal
+                            addr_int = ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_INT).AddressIndex(i).PublicKey().ToAddress()
+                            if addr_int in targets:
+                                results["found"] = True
+                                results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr_int, "path_index": i, "chain": "internal"})
+                        except Exception: pass
+            except Exception: pass
 
         # 2. As raw hex key
         if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
@@ -173,7 +216,7 @@ def run_btcrecover_scan(
                     results["found"] = True
                     results["matches"].append({"type": "wif", "value": pwd, "address": addr})
 
-        # 4. As password hash
+        # 4. As password hash (Brainwallet style)
         hashed_key = hashlib.sha256(pwd.encode()).hexdigest()
         potential_keys.append(hashed_key)
 
