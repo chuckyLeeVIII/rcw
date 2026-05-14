@@ -251,17 +251,17 @@ export function RecoveryAIAssistant() {
              <Target className="w-3 h-3" /> Deep Search: {isDeepSearchEnabled ? 'ENABLED' : 'DISABLED'}
            </div>
 
-           {(recoveryAttempts > 0) && (
+           {(isScannerRunning || recoveryAttempts > 0) && (
              <div className="flex items-center gap-3 ml-auto">
                <div className="flex items-center gap-1 text-cyan-400">
                  <Activity className="w-3 h-3" /> Attempts: {recoveryAttempts.toLocaleString()}
                </div>
-               <div className={`flex items-center gap-1 ${recoveryMatches > 0 ? 'text-emerald-400 animate-pulse' : 'text-gray-500'}`}>
+               <div className={recoveryMatches > 0 ? "flex items-center gap-1 text-emerald-400 animate-pulse" : "flex items-center gap-1 text-gray-500"}>
                  <Sparkles className="w-3 h-3" /> Matches: {recoveryMatches}
                </div>
              </div>
            )}
-           {!recoveryAttempts && <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>}
+           {!isScannerRunning && !recoveryAttempts && <div className="flex items-center gap-1 ml-auto text-amber-900"><Target className="w-3 h-3" /> Targeted Search: ENABLED</div>}
         </div>
       </div>
     </div>
