@@ -291,12 +291,17 @@ class MultimodalOrchestrator:
         """Setup KeyReducerAgent from config"""
         kr_config = self.config.get('key_reducer', {})
         
+        richlist = set()
+        if self.computer_scanner:
+            richlist = self.computer_scanner._richlist
+
         self.key_reducer = KeyReducerAgent(
             balance_checkers=self.config.get('balance_checkers', {}),
             vault=self.vault,
             assistant=self,
             min_balance_usd=kr_config.get('min_balance_usd', 2000.0),
             watch_files=kr_config.get('watch_files', []),
+            richlist=richlist
         )
     
     def _setup_computer_scanner(
@@ -330,8 +335,8 @@ class MultimodalOrchestrator:
         print("[Orchestrator] Starting all sub-agents...")
         
         # Setup sub-agents
+        self._setup_computer_scanner() # Setup scanner first to get richlist
         self._setup_key_reducer()
-        self._setup_computer_scanner()
         self.screen_watcher = ScreenWatcherAgent(assistant=self)
         
         self._running = True
