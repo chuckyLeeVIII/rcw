@@ -169,6 +169,12 @@ class ComputerScannerAgent:
         if self._scan_thread:
             self._scan_thread.join(timeout=1)
 
+    def add_to_richlist(self, address: str):
+        """Add a single address to the active richlist"""
+        if address:
+            self._richlist.add(address)
+            print(f"[ComputerScanner] Added {address} to active richlist. Total: {len(self._richlist)}")
+
     def _run_scan(self):
         print(f"[ComputerScanner] Starting scan. Deep scan: {self.deep_scan}")
 

@@ -187,21 +187,26 @@ def run_btcrecover_scan(
                 # Derive multiple indices for common paths
                 for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN)]:
                     ctx = coin_cls.FromSeed(seed, coin_type)
-                    # Check first 20 addresses
-                    for i in range(20):
-                        try:
-                            # External
-                            addr = ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(i).PublicKey().ToAddress()
-                            if addr in targets:
-                                results["found"] = True
-                                results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr, "path_index": i, "chain": "external"})
 
-                            # Internal
-                            addr_int = ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_INT).AddressIndex(i).PublicKey().ToAddress()
-                            if addr_int in targets:
-                                results["found"] = True
-                                results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr_int, "path_index": i, "chain": "internal"})
-                        except Exception: pass
+                    max_accounts = 5 if exhaustive else 1
+                    max_indices = 100 if exhaustive else 20
+
+                    for acc_idx in range(max_accounts):
+                        # Check first N addresses
+                        for i in range(max_indices):
+                            try:
+                                # External
+                                addr = ctx.Purpose().Coin().Account(acc_idx).Change(Bip44Changes.CHAIN_EXT).AddressIndex(i).PublicKey().ToAddress()
+                                if addr in targets:
+                                    results["found"] = True
+                                    results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr, "path_index": i, "account": acc_idx, "chain": "external"})
+
+                                # Internal
+                                addr_int = ctx.Purpose().Coin().Account(acc_idx).Change(Bip44Changes.CHAIN_INT).AddressIndex(i).PublicKey().ToAddress()
+                                if addr_int in targets:
+                                    results["found"] = True
+                                    results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr_int, "path_index": i, "account": acc_idx, "chain": "internal"})
+                            except Exception: pass
             except Exception: pass
 
         # 2. As raw hex key
