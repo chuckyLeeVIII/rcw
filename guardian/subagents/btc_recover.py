@@ -92,16 +92,18 @@ def generate_typos(token: str) -> Set[str]:
             typos.add("".join(c3))
 
     # 3. Common Substitutions
-    subs = {
-        'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
-        'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
-        'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'
-    }
-    for i, c in enumerate(chars):
-        if c.lower() in subs:
-            c2 = chars[:]
-            c2[i] = subs[c.lower()]
-            typos.add("".join(c2))
+    subs_list = [
+        {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
+         'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
+         'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
+        {'s': '$', 'a': '@', 'i': '!', 'e': '€'}
+    ]
+    for subs in subs_list:
+        for i, c in enumerate(chars):
+            if c.lower() in subs:
+                c2 = chars[:]
+                c2[i] = subs[c.lower()]
+                typos.add("".join(c2))
 
     # 4. Insertions (duplicate characters)
     for i in range(len(chars)):
@@ -121,6 +123,13 @@ def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
     perms = set()
     base_tokens = []
     for t in tokens:
+        # Word-level mutations if it's a potential mnemonic fragment
+        if " " in t:
+            words = t.split()
+            if len(words) <= 4:
+                for combo in itertools.permutations(words):
+                    perms.add(" ".join(combo))
+
         base_tokens.extend([t, t.lower(), t.upper(), t.capitalize()])
 
     base_tokens = list(set(base_tokens))
