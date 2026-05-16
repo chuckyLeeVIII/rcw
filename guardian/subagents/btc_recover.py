@@ -195,24 +195,25 @@ def run_btcrecover_scan(
                 seed = Bip39SeedGenerator(norm_pwd).Generate()
                 # Derive multiple indices for common paths
                 for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN)]:
-                    # Check multiple accounts if exhaustive
+                    ctx = coin_cls.FromSeed(seed, coin_type)
+
                     max_accounts = 5 if exhaustive else 1
                     max_indices = 100 if exhaustive else 20
 
-                    coin_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin()
                     for acc_idx in range(max_accounts):
-                        ctx = coin_ctx.Account(acc_idx)
-                        # Check addresses
+                        acc_ctx = ctx.Purpose().Coin().Account(acc_idx)
+                        ext_chain = acc_ctx.Change(Bip44Changes.CHAIN_EXT)
+                        int_chain = acc_ctx.Change(Bip44Changes.CHAIN_INT)
                         for i in range(max_indices):
                             try:
                                 # External
-                                addr = ctx.Change(Bip44Changes.CHAIN_EXT).AddressIndex(i).PublicKey().ToAddress()
+                                addr = ext_chain.AddressIndex(i).PublicKey().ToAddress()
                                 if addr in targets:
                                     results["found"] = True
                                     results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr, "path_index": i, "account": acc_idx, "chain": "external"})
 
                                 # Internal
-                                addr_int = ctx.Change(Bip44Changes.CHAIN_INT).AddressIndex(i).PublicKey().ToAddress()
+                                addr_int = int_chain.AddressIndex(i).PublicKey().ToAddress()
                                 if addr_int in targets:
                                     results["found"] = True
                                     results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr_int, "path_index": i, "account": acc_idx, "chain": "internal"})
