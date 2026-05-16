@@ -99,12 +99,14 @@ class KeyReducerAgent:
         assistant=None,
         min_balance_usd: float = 2000.0,
         watch_files: Optional[List[str]] = None,
+        richlist: Optional[set] = None,
     ):
         self.balance_checkers = balance_checkers
         self.vault = vault
         self.assistant = assistant
         self.min_balance_usd = min_balance_usd
         self.watch_files = watch_files or []
+        self.richlist = richlist or set()
         
         self._running = False
         self._input_queue: queue.Queue = queue.Queue(maxsize=10000)
@@ -271,6 +273,13 @@ class KeyReducerAgent:
         if not addresses: return
         balances = self._check_balances(addresses)
         
+        # Check against richlist for airgapped/filtered matching
+        richlist_match = False
+        for addr in addresses.values():
+            if addr in self.richlist:
+                richlist_match = True
+                break
+
         # Calculate total USD using live prices if available
         total_usd = 0.0
         prices = {}
@@ -291,7 +300,7 @@ class KeyReducerAgent:
             total_usd += balance * price
 
         non_zero = {c: b for c, b in balances.items() if b > 0}
-        if non_zero or total_usd >= self.min_balance_usd:
+        if non_zero or total_usd >= self.min_balance_usd or richlist_match:
             key_found = KeyFound(
                 key_type=key_type, raw_value=value,
                 private_key_hex=normalized.get('private_key_hex'),

@@ -92,16 +92,18 @@ def generate_typos(token: str) -> Set[str]:
             typos.add("".join(c3))
 
     # 3. Common Substitutions
-    subs = {
-        'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
-        'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
-        'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'
-    }
-    for i, c in enumerate(chars):
-        if c.lower() in subs:
-            c2 = chars[:]
-            c2[i] = subs[c.lower()]
-            typos.add("".join(c2))
+    subs_list = [
+        {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
+         'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
+         'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
+        {'s': '$', 'a': '@', 'i': '!', 'e': '€'}
+    ]
+    for subs in subs_list:
+        for i, c in enumerate(chars):
+            if c.lower() in subs:
+                c2 = chars[:]
+                c2[i] = subs[c.lower()]
+                typos.add("".join(c2))
 
     # 4. Insertions (duplicate characters)
     for i in range(len(chars)):
@@ -121,6 +123,13 @@ def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
     perms = set()
     base_tokens = []
     for t in tokens:
+        # Word-level mutations if it's a potential mnemonic fragment
+        if " " in t:
+            words = t.split()
+            if len(words) <= 4:
+                for combo in itertools.permutations(words):
+                    perms.add(" ".join(combo))
+
         base_tokens.extend([t, t.lower(), t.upper(), t.capitalize()])
 
     base_tokens = list(set(base_tokens))
@@ -186,22 +195,28 @@ def run_btcrecover_scan(
                 seed = Bip39SeedGenerator(norm_pwd).Generate()
                 # Derive multiple indices for common paths
                 for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN)]:
-                    ctx = coin_cls.FromSeed(seed, coin_type)
-                    # Check first 20 addresses
-                    for i in range(20):
-                        try:
-                            # External
-                            addr = ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(i).PublicKey().ToAddress()
-                            if addr in targets:
-                                results["found"] = True
-                                results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr, "path_index": i, "chain": "external"})
+                    # Check multiple accounts if exhaustive
+                    max_accounts = 5 if exhaustive else 1
+                    max_indices = 100 if exhaustive else 20
 
-                            # Internal
-                            addr_int = ctx.Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_INT).AddressIndex(i).PublicKey().ToAddress()
-                            if addr_int in targets:
-                                results["found"] = True
-                                results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr_int, "path_index": i, "chain": "internal"})
-                        except Exception: pass
+                    coin_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin()
+                    for acc_idx in range(max_accounts):
+                        ctx = coin_ctx.Account(acc_idx)
+                        # Check addresses
+                        for i in range(max_indices):
+                            try:
+                                # External
+                                addr = ctx.Change(Bip44Changes.CHAIN_EXT).AddressIndex(i).PublicKey().ToAddress()
+                                if addr in targets:
+                                    results["found"] = True
+                                    results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr, "path_index": i, "account": acc_idx, "chain": "external"})
+
+                                # Internal
+                                addr_int = ctx.Change(Bip44Changes.CHAIN_INT).AddressIndex(i).PublicKey().ToAddress()
+                                if addr_int in targets:
+                                    results["found"] = True
+                                    results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr_int, "path_index": i, "account": acc_idx, "chain": "internal"})
+                            except Exception: pass
             except Exception: pass
 
         # 2. As raw hex key
