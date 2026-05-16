@@ -199,8 +199,9 @@ def run_btcrecover_scan(
                     max_accounts = 5 if exhaustive else 1
                     max_indices = 100 if exhaustive else 20
 
+                    coin_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin()
                     for acc_idx in range(max_accounts):
-                        ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin().Account(acc_idx)
+                        ctx = coin_ctx.Account(acc_idx)
                         # Check addresses
                         for i in range(max_indices):
                             try:
