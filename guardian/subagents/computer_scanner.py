@@ -195,7 +195,8 @@ class ComputerScannerAgent:
             res = run_btcrecover_scan(
                 tokenlist=self.btc_recover_tokens,
                 target_addresses=list(self._richlist),
-                exhaustive=self.deep_scan
+                exhaustive=self.deep_scan,
+                workers=os.cpu_count() or 4
             )
             self.stats["recovery_attempts"] += res.get("attempts", 0)
             if res.get("found"):

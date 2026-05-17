@@ -1,8 +1,9 @@
 import hashlib
 import itertools
+from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, Optional, List, Set
 from bip_utils import (
-    Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins,
+    Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins, Bip86, Bip86Coins,
     WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
     P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes
 )
@@ -32,6 +33,12 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
         bip84_ctx = Bip84.FromPrivateKey(priv_bytes, Bip84Coins.BITCOIN)
         p2wpkh = bip84_ctx.PublicKey().ToAddress()
 
+        # Taproot (P2TR)
+        try:
+            bip86_ctx = Bip86.FromPrivateKey(priv_bytes, Bip86Coins.BITCOIN)
+            p2tr = bip86_ctx.PublicKey().ToAddress()
+        except Exception: p2tr = None
+
         # WIF
         wif_comp = WifEncoder.Encode(priv_bytes, pub_key_mode=WifPubKeyModes.COMPRESSED)
         wif_uncomp = WifEncoder.Encode(priv_bytes, pub_key_mode=WifPubKeyModes.UNCOMPRESSED)
@@ -44,12 +51,14 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
             'btc_p2pkh_uncompressed': p2pkh_uncomp,
             'btc_p2sh_p2wpkh': p2sh_p2wpkh,
             'btc_p2wpkh': p2wpkh,
+            'btc_p2tr': p2tr,
             'btc': p2wpkh,
             'addresses': {
                 'btc': p2wpkh,
                 'btc_legacy': p2pkh,
                 'btc_legacy_uncompressed': p2pkh_uncomp,
-                'btc_nested': p2sh_p2wpkh
+                'btc_nested': p2sh_p2wpkh,
+                'btc_taproot': p2tr
             }
         }
     except Exception:
@@ -96,7 +105,7 @@ def generate_typos(token: str) -> Set[str]:
         {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
          'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
          'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
-        {'s': '$', 'a': '@', 'i': '!', 'e': '€'}
+        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v'}
     ]
     for subs in subs_list:
         for i, c in enumerate(chars):
@@ -139,12 +148,71 @@ def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
             perms.add("".join(combo))
     return perms
 
+def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: str = "") -> List[Dict]:
+    """Check a single password/token candidate against all derivation logic"""
+    matches = []
+    if not pwd: return matches
+
+    # 1. As mnemonic
+    norm_pwd = " ".join(pwd.lower().split())
+    is_mnemonic = False
+    try:
+        is_mnemonic = Bip39MnemonicValidator().IsValid(norm_pwd)
+    except Exception: pass
+
+    if is_mnemonic:
+        try:
+            seed = Bip39SeedGenerator(norm_pwd).Generate(passphrase)
+            for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN)]:
+                max_accounts = 5 if exhaustive else 1
+                max_indices = 100 if exhaustive else 20
+                for acc_idx in range(max_accounts):
+                    acc_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin().Account(acc_idx)
+                    for i in range(max_indices):
+                        for chain in [Bip44Changes.CHAIN_EXT, Bip44Changes.CHAIN_INT]:
+                            try:
+                                addr = acc_ctx.Change(chain).AddressIndex(i).PublicKey().ToAddress()
+                                if addr in targets:
+                                    matches.append({
+                                        "type": "mnemonic", "value": norm_pwd, "address": addr,
+                                        "path_index": i, "account": acc_idx,
+                                        "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
+                                        "passphrase": passphrase
+                                    })
+                            except Exception: pass
+        except Exception: pass
+
+    # 2. As raw hex key (Brainwallet or Raw)
+    potential_keys = []
+    if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
+        potential_keys.append(pwd)
+
+    # Brainwallet SHA256
+    potential_keys.append(hashlib.sha256(pwd.encode()).hexdigest())
+
+    for k in potential_keys:
+        res = btc_from_hex(k)
+        if res:
+            for addr in res['addresses'].values():
+                if addr in targets:
+                    matches.append({"type": "private_key", "value": pwd, "address": addr, "hex": k})
+
+    # 3. As WIF
+    res_wif = btc_from_wif(pwd)
+    if res_wif:
+        for addr in res_wif['addresses'].values():
+            if addr in targets:
+                matches.append({"type": "wif", "value": pwd, "address": addr})
+
+    return matches
+
 def run_btcrecover_scan(
     wallet_file: str = None,
     passwords: List[str] = None,
     tokenlist: List[str] = None,
     target_addresses: List[str] = None,
-    exhaustive: bool = False
+    exhaustive: bool = False,
+    workers: int = 4
 ) -> Dict:
     """
     Exhaustive BTC recovery logic.
@@ -175,75 +243,36 @@ def run_btcrecover_scan(
             candidates.update(tokenlist)
             candidates.update(generate_permutations(tokenlist, max_len=2))
 
-    for pwd in candidates:
-        if not pwd: continue
-        results["attempts"] += 1
+    results["attempts"] = len(candidates)
 
-        # Check potential candidates
-        potential_keys = []
+    # Process candidates in parallel for "bulletproof" speed
+    if exhaustive and len(candidates) > 5:
+        # For exhaustive, we also try cross-pollinating tokens as passphrases for mnemonics
+        passphrases = [""]
+        if exhaustive:
+            # Add top 5 candidates as potential passphrases to avoid explosion but catch common ones
+            passphrases.extend(list(candidates)[:5])
 
-        # 1. As mnemonic
-        norm_pwd = " ".join(pwd.lower().split())
-        is_mnemonic = False
-        try:
-            is_mnemonic = Bip39MnemonicValidator().IsValid(norm_pwd)
-        except Exception:
-            pass
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            all_futures = []
+            for pwd in candidates:
+                for pp in passphrases:
+                    # Skip if password is same as passphrase (unless empty)
+                    if pp and pwd == pp: continue
+                    all_futures.append(executor.submit(check_candidate, pwd, targets, exhaustive, pp))
 
-        if is_mnemonic:
-            try:
-                seed = Bip39SeedGenerator(norm_pwd).Generate()
-                # Derive multiple indices for common paths
-                for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN)]:
-                    # Check multiple accounts if exhaustive
-                    max_accounts = 5 if exhaustive else 1
-                    max_indices = 100 if exhaustive else 20
-
-                    coin_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin()
-                    for acc_idx in range(max_accounts):
-                        ctx = coin_ctx.Account(acc_idx)
-                        # Check addresses
-                        for i in range(max_indices):
-                            try:
-                                # External
-                                addr = ctx.Change(Bip44Changes.CHAIN_EXT).AddressIndex(i).PublicKey().ToAddress()
-                                if addr in targets:
-                                    results["found"] = True
-                                    results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr, "path_index": i, "account": acc_idx, "chain": "external"})
-
-                                # Internal
-                                addr_int = ctx.Change(Bip44Changes.CHAIN_INT).AddressIndex(i).PublicKey().ToAddress()
-                                if addr_int in targets:
-                                    results["found"] = True
-                                    results["matches"].append({"type": "mnemonic", "value": norm_pwd, "address": addr_int, "path_index": i, "account": acc_idx, "chain": "internal"})
-                            except Exception: pass
-            except Exception: pass
-
-        # 2. As raw hex key
-        if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
-            potential_keys.append(pwd)
-
-        # 3. As WIF
-        res_wif = btc_from_wif(pwd)
-        if res_wif:
-            for addr in res_wif['addresses'].values():
-                if addr in targets:
+            for future in all_futures:
+                found_matches = future.result()
+                if found_matches:
                     results["found"] = True
-                    results["matches"].append({"type": "wif", "value": pwd, "address": addr})
-
-        # 4. As password hash (Brainwallet style)
-        hashed_key = hashlib.sha256(pwd.encode()).hexdigest()
-        potential_keys.append(hashed_key)
-
-        for k in potential_keys:
-            res = btc_from_hex(k)
-            if res:
-                for addr in res['addresses'].values():
-                    if addr in targets:
-                        results["found"] = True
-                        results["matches"].append({"type": "private_key", "value": pwd, "address": addr, "hex": k})
-
-        if results["found"] and not exhaustive:
-            break
+                    results["matches"].extend(found_matches)
+    else:
+        for pwd in candidates:
+            found_matches = check_candidate(pwd, targets, exhaustive)
+            if found_matches:
+                results["found"] = True
+                results["matches"].extend(found_matches)
+            if results["found"] and not exhaustive:
+                break
 
     return results
