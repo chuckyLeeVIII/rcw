@@ -40,17 +40,17 @@ async def start_scan(req: ScanRequest):
     orchestrator.computer_scanner.scan_paths = req.paths
     orchestrator.computer_scanner.skip_balance_check = not req.check_balances
     orchestrator.computer_scanner.deep_scan = req.deep_scan
-    orchestrator.computer_scanner.btc_recover_tokens = req.recovery_tokens or []
+
+    if req.recovery_tokens:
+        orchestrator.computer_scanner.btc_recover_tokens = req.recovery_tokens
 
     if req.richlist:
-        # If richlist is a file path that exists, load it
-        if os.path.exists(req.richlist):
+        # If richlist looks like an address, add it directly, otherwise treat as path
+        if len(req.richlist) > 25 and not os.path.exists(req.richlist):
+             orchestrator.computer_scanner._richlist.add(req.richlist)
+        else:
             orchestrator.computer_scanner.richlist_path = req.richlist
             orchestrator.computer_scanner._load_richlist()
-        else:
-            # If it looks like a crypto address, add it directly
-            if len(req.richlist) >= 26: # Minimum length for most crypto addresses
-                orchestrator.computer_scanner.add_to_richlist(req.richlist)
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}

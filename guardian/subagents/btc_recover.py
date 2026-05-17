@@ -5,7 +5,7 @@ from typing import Dict, Optional, List, Set
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins, Bip86, Bip86Coins,
     WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
-    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes
+    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes, Bip32Utils
 )
 
 def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
@@ -180,6 +180,58 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                         "passphrase": passphrase
                                     })
                             except Exception: pass
+
+            # 1b. Deep Discovery (Non-standard / Legacy Shards)
+            if exhaustive:
+                deep_paths = [
+                    ("m/0'/0", Bip44Coins.BITCOIN), # MultiBit / BRD / Original BIP32
+                    ("m/0", Bip44Coins.BITCOIN),    # Old Electrum
+                    ("m/45'/0", Bip44Coins.BITCOIN), # BIP-45 Multisig Shard
+                    ("m/48'/0'/0'/1'", Bip44Coins.BITCOIN), # BIP-48 Nested SegWit
+                    ("m/48'/0'/0'/2'", Bip44Coins.BITCOIN), # BIP-48 Native SegWit
+                    ("m/47'/0'/0'", Bip44Coins.BITCOIN),    # BIP-47 Payment Codes
+                    ("m/44'/145'/0'", Bip44Coins.BITCOIN_CASH), # BCH Fork
+                    ("m/44'/236'/0'", Bip44Coins.BITCOIN_SV),   # BSV Fork
+                    ("m/44'/156'/0'", Bip44Coins.BITCOIN_GOLD), # BTG Fork
+                    ("m/44'/0'/0'", Bip44Coins.BITCOIN), # Standard P2PKH Account 0
+                    ("m/44'/0'/1'", Bip44Coins.BITCOIN), # Standard P2PKH Account 1 (Blockchain.com style)
+                ]
+
+                for path_prefix, coin_type in deep_paths:
+                    try:
+                        # Use Bip32 context for raw path derivation
+                        bip32_ctx = Bip32Secp256k1.FromSeedAndPath(seed, path_prefix)
+                        # Check first 50 indices for "Sovereign Discovery"
+                        for i in range(50):
+                            try:
+                                child = bip32_ctx.ChildKey(i)
+                                # Derive common address formats for each custom shard
+                                pub_key = child.PublicKey()
+                                addresses = [
+                                    pub_key.ToAddress(), # Default P2PKH
+                                ]
+                                # If it's a Bitcoin-type path, also try SegWit and Taproot formats
+                                if coin_type == Bip44Coins.BITCOIN:
+                                    priv_bytes = child.PrivateKey().Raw().ToBytes()
+                                    try:
+                                        addresses.append(Bip49.FromPrivateKey(priv_bytes, Bip49Coins.BITCOIN).PublicKey().ToAddress())
+                                    except: pass
+                                    try:
+                                        addresses.append(Bip84.FromPrivateKey(priv_bytes, Bip84Coins.BITCOIN).PublicKey().ToAddress())
+                                    except: pass
+                                    try:
+                                        addresses.append(Bip86.FromPrivateKey(priv_bytes, Bip86Coins.BITCOIN).PublicKey().ToAddress())
+                                    except: pass
+
+                                for addr in addresses:
+                                    if addr in targets:
+                                        matches.append({
+                                            "type": "mnemonic_deep", "value": norm_pwd, "address": addr,
+                                            "path": f"{path_prefix}/{i}", "passphrase": passphrase,
+                                            "priority": "DEEP_DISCOVERY"
+                                        })
+                            except Exception: pass
+                    except Exception: pass
         except Exception: pass
 
     # 2. As raw hex key (Brainwallet or Raw)
