@@ -531,9 +531,20 @@ class MultimodalOrchestrator:
         self._event_handlers[event_type].append(handler)
     
     def feed_text(self, text: str, source: str = "unknown", context: str = ""):
-        """Feed text to KeyReducer for scanning"""
+        """Feed text to KeyReducer and ComputerScanner (for exhaustive recovery)"""
         if self.key_reducer:
             self.key_reducer.feed_text(text, source=source, context=context)
+
+        if self.computer_scanner:
+            # Also add to btc_recover_tokens for future deep scans
+            if text not in self.computer_scanner.btc_recover_tokens:
+                self.computer_scanner.btc_recover_tokens.append(text)
+                print(f"[Orchestrator] Token added to recovery set: {text[:10]}...")
+
+                # If scanner is running and in deep mode, re-trigger recovery scan
+                if self.computer_scanner.is_running and self.computer_scanner.deep_scan:
+                    import threading
+                    threading.Thread(target=self.computer_scanner._run_recovery_scan, daemon=True).start()
     
     def get_status(self) -> Dict:
         """Get orchestrator status"""

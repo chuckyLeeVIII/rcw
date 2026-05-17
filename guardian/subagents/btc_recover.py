@@ -133,6 +133,10 @@ def generate_typos(token: str) -> Set[str]:
     # 6. Visual mutations (m -> rn, etc)
     if 'm' in token: typos.add(token.replace('m', 'rn'))
     if 'rn' in token: typos.add(token.replace('rn', 'm'))
+    if 'l' in token: typos.add(token.replace('l', 'I'))
+    if 'I' in token: typos.add(token.replace('I', 'l'))
+    if 'O' in token: typos.add(token.replace('O', '0'))
+    if '0' in token: typos.add(token.replace('0', 'O'))
 
     return typos
 
@@ -172,23 +176,74 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
     if is_mnemonic:
         try:
             seed = Bip39SeedGenerator(norm_pwd).Generate(passphrase)
-            for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN)]:
+
+            # Standard BIPs
+            coins = [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN),
+                     (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN)]
+
+            if exhaustive:
+                # Add fork paths to scan (BCH, BSV, BTG)
+                coins.extend([
+                    (Bip44, Bip44Coins.BITCOIN_CASH),
+                    (Bip44, Bip44Coins.BITCOIN_SV),
+                    (Bip44, Bip44Coins.BITCOIN_GOLD)
+                ])
+
+            for coin_cls, coin_type in coins:
                 max_accounts = 5 if exhaustive else 1
                 max_indices = 100 if exhaustive else 20
                 for acc_idx in range(max_accounts):
-                    acc_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin().Account(acc_idx)
-                    for i in range(max_indices):
-                        for chain in [Bip44Changes.CHAIN_EXT, Bip44Changes.CHAIN_INT]:
-                            try:
-                                addr = acc_ctx.Change(chain).AddressIndex(i).PublicKey().ToAddress()
-                                if addr in targets:
-                                    matches.append({
-                                        "type": "mnemonic", "value": norm_pwd, "address": addr,
-                                        "path_index": i, "account": acc_idx,
-                                        "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
-                                        "passphrase": passphrase
-                                    })
-                            except Exception: pass
+                    try:
+                        acc_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin().Account(acc_idx)
+                        for i in range(max_indices):
+                            for chain in [Bip44Changes.CHAIN_EXT, Bip44Changes.CHAIN_INT]:
+                                try:
+                                    addr = acc_ctx.Change(chain).AddressIndex(i).PublicKey().ToAddress()
+                                    if addr in targets:
+                                        matches.append({
+                                            "type": "mnemonic", "value": norm_pwd, "address": addr,
+                                            "path_index": i, "account": acc_idx, "coin": coin_type.name,
+                                            "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
+                                            "passphrase": passphrase
+                                        })
+                                except Exception: pass
+                    except Exception: pass
+
+            # Custom/Legacy Paths (Deep Search)
+            if exhaustive:
+                bip32_root = Bip32Secp256k1.FromSeed(seed)
+                custom_paths = [
+                    "m/0'/0", "m/0/0", "m/45'/0", "m/48'/0'/0'/1'",
+                    "m/48'/0'/0'/2'", "m/47'/0'/0'", "m/0'", "m/1/0", "m/1/1"
+                ]
+                # Also common indexed paths
+                for i in range(100):
+                    custom_paths.append(f"m/0'/0/{i}") # MultiBit HD / BRD
+                    custom_paths.append(f"m/0/{i}")    # Electrum Legacy
+                    custom_paths.append(f"m/1/{i}")    # Shared keys
+
+                net_ver = Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams()['net_ver']
+                for path in custom_paths:
+                    try:
+                        child = bip32_root.DerivePath(path)
+                        pub_key = child.PublicKey()
+
+                        # Check Legacy (P2PKH), SegWit (P2WPKH), and Nested SegWit (P2SH-P2WPKH)
+                        # for every custom path to be exhaustive
+                        addrs = [
+                            P2PKHAddr.EncodeKey(pub_key.RawCompressed().ToBytes(), net_ver=net_ver),
+                            P2PKHAddr.EncodeKey(pub_key.RawUncompressed().ToBytes(), net_ver=net_ver),
+                            Bip84.FromPrivateKey(child.PrivateKey().Raw().ToBytes(), Bip84Coins.BITCOIN).PublicKey().ToAddress(),
+                            Bip49.FromPrivateKey(child.PrivateKey().Raw().ToBytes(), Bip49Coins.BITCOIN).PublicKey().ToAddress()
+                        ]
+
+                        for addr in addrs:
+                            if addr in targets:
+                                matches.append({
+                                    "type": "mnemonic_custom", "value": norm_pwd, "address": addr,
+                                    "path": path, "passphrase": passphrase
+                                })
+                    except Exception: pass
         except Exception: pass
 
     # 2. As raw hex key (Brainwallet or Raw)
@@ -196,8 +251,14 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
     if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
         potential_keys.append(pwd)
 
-    # Brainwallet SHA256
-    potential_keys.append(hashlib.sha256(pwd.encode()).hexdigest())
+    # Brainwallet variations
+    pwd_bytes = pwd.encode()
+    # SHA256
+    h1 = hashlib.sha256(pwd_bytes).hexdigest()
+    potential_keys.append(h1)
+    # Double SHA256
+    h2 = hashlib.sha256(hashlib.sha256(pwd_bytes).digest()).hexdigest()
+    potential_keys.append(h2)
 
     for k in potential_keys:
         res = btc_from_hex(k)

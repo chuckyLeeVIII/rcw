@@ -1,5 +1,6 @@
 import * as bip39 from 'bip39';
 import * as bitcoin from 'bitcoinjs-lib';
+import * as secp from '@bitcoinerlab/secp256k1';
 import { DiscoveredWallet, SUPPORTED_NETWORKS, BIP44_PURPOSE, BIP49_PURPOSE, BIP84_PURPOSE, BIP86_PURPOSE, DEFAULT_SCAN_DEPTH, DEFAULT_ACCOUNTS } from '../types/recoveryPool';
 
 // Network configurations for bitcoinjs-lib

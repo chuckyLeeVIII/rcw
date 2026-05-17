@@ -26,6 +26,10 @@ class ScanRequest(BaseModel):
     check_balances: bool = True
     recovery_tokens: Optional[List[str]] = None
 
+class FeedRequest(BaseModel):
+    tokens: List[str]
+    source: str = "assistant"
+
 @app.get("/api/status")
 async def get_status():
     if not orchestrator:
@@ -55,6 +59,14 @@ async def start_scan(req: ScanRequest):
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
 
+
+@app.post("/api/assistant/feed")
+async def assistant_feed(req: FeedRequest):
+    if not orchestrator:
+        return {"error": "Orchestrator not available"}
+    for token in req.tokens:
+        orchestrator.feed_text(token, source=req.source)
+    return {"status": "ingested", "count": len(req.tokens)}
 
 @app.post("/api/scan/stop")
 async def stop_scan():

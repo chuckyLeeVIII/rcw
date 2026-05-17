@@ -707,7 +707,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const recoverFromDatFile = useCallback(async (file: File) => {
     setState(prev => ({ ...prev, isScanning: true, scanProgress: 0 }));
 
-    const parsed = await parseWalletdat(file, (progress) => {
+    const parsed = await parseWalletDat(file, (progress) => {
       setState(prev => ({ ...prev, scanProgress: progress }));
     });
 

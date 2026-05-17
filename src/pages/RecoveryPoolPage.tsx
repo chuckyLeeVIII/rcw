@@ -263,7 +263,7 @@ export function RecoveryPoolPage() {
                       {showKeys[wallet.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                     </button>
                   </div>
-                  {showKeys[wallet.id] && wallet.privateKey && (
+                  {showKeys[wallet.id] && wallet.privateKey && typeof wallet.privateKey === 'string' && (
                     <div className="mt-2 p-2 bg-gray-800/50 rounded text-xs">
                       <div className="text-gray-400">Private: {wallet.privateKey.slice(0, 20)}...</div>
                     </div>
