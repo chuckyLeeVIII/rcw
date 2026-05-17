@@ -436,7 +436,8 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const loadedStats: StoredPoolData['stats'] = st || defaultStats();
 
         const totals = calculateTotalBalances(loadedWallets);
-        setState({
+        setState(prev => ({
+          ...prev,
           sources: loadedSources,
           discoveredWallets: loadedWallets,
           isScanning: false,
@@ -444,7 +445,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
           totalBalance: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.total])),
           totalBalanceFormatted: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, v.formatted])),
           networksScanned: [...new Set(loadedWallets.map(w => w.network))],
-        });
+        }));
         setSettings(loadedSettings);
         setStats(loadedStats);
         if (seed) setPoolMasterSeed(seed);
@@ -1393,7 +1394,8 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
       createdAt: w.createdAt || Date.now(),
     }));
 
-    setState({
+    setState(prev => ({
+      ...prev,
       sources: data.sources || [],
       discoveredWallets: wallets,
       isScanning: false,
@@ -1401,7 +1403,7 @@ export const RecoveryPoolProvider: React.FC<{ children: React.ReactNode }> = ({ 
       totalBalance: {},
       totalBalanceFormatted: {},
       networksScanned: [...new Set(wallets.map(w => w.network))],
-    });
+    }));
     setSettings(data.settings || defaultSettings());
     setStats(data.stats || defaultStats());
 
