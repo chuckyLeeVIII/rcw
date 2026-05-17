@@ -43,6 +43,21 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
         wif_comp = WifEncoder.Encode(priv_bytes, pub_key_mode=WifPubKeyModes.COMPRESSED)
         wif_uncomp = WifEncoder.Encode(priv_bytes, pub_key_mode=WifPubKeyModes.UNCOMPRESSED)
 
+        addresses = {
+            'btc': p2wpkh,
+            'btc_legacy': p2pkh,
+            'btc_legacy_uncompressed': p2pkh_uncomp,
+            'btc_nested': p2sh_p2wpkh,
+            'btc_taproot': p2tr
+        }
+
+        # Fork addresses (Common in recovery)
+        try:
+            addresses['bch'] = Bip44.FromPrivateKey(priv_bytes, Bip44Coins.BITCOIN_CASH).PublicKey().ToAddress()
+            addresses['bsv'] = Bip44.FromPrivateKey(priv_bytes, Bip44Coins.BITCOIN_SV).PublicKey().ToAddress()
+            addresses['btg'] = Bip44.FromPrivateKey(priv_bytes, Bip44Coins.BITCOIN_GOLD).PublicKey().ToAddress()
+        except Exception: pass
+
         return {
             'private_key_hex': hex_key,
             'wif_compressed': wif_comp,
@@ -53,13 +68,7 @@ def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
             'btc_p2wpkh': p2wpkh,
             'btc_p2tr': p2tr,
             'btc': p2wpkh,
-            'addresses': {
-                'btc': p2wpkh,
-                'btc_legacy': p2pkh,
-                'btc_legacy_uncompressed': p2pkh_uncomp,
-                'btc_nested': p2sh_p2wpkh,
-                'btc_taproot': p2tr
-            }
+            'addresses': addresses
         }
     except Exception:
         return None
