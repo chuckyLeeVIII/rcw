@@ -50,8 +50,8 @@ export function RecoveryAIAssistant() {
           setRecoveryMatches(statusData.computer_scanner.recovery_matches || 0);
         }
         if (statusData.agents) {
-            setIsMixHunterRunning(statusData.agents.mixhunter.running);
-            setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
+            if (statusData.agents.mixhunter) setIsMixHunterRunning(statusData.agents.mixhunter.running);
+            if (statusData.agents.screen_watcher) setIsScreenWatcherRunning(statusData.agents.screen_watcher.running);
         }
       } catch (err) {
         console.error('Intelligence poll failure:', err);
@@ -73,6 +73,18 @@ export function RecoveryAIAssistant() {
 
     if (input.toLowerCase() === 'start scan') {
         toggleScanner();
+    } else if (input.toLowerCase().startsWith('/deep-search')) {
+        setIsDeepSearchEnabled(true);
+        const query = input.replace('/deep-search', '').trim();
+        setMessages(prev => [...prev, {
+            type: 'ai',
+            text: `DEEP_SEARCH_ARMED: Exhaustive mutation engine active. Ingesting session intelligence... ${query ? `Target: ${query}` : ''}`,
+            time: new Date()
+        }]);
+        // Trigger scan automatically if not running
+        if (!isScannerRunning) {
+            setTimeout(() => toggleScanner(true), 500);
+        }
     } else if (input.toLowerCase() === 'start mixhunter') {
         toggleMixHunter();
     } else if (/^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})$/.test(input)) {
@@ -97,15 +109,15 @@ export function RecoveryAIAssistant() {
     setChatInput('');
   };
 
-  const toggleScanner = async () => {
+  const toggleScanner = async (forceDeep?: boolean) => {
     try {
+      const deep = forceDeep ?? isDeepSearchEnabled;
       const endpoint = isScannerRunning ? 'stop' : 'start';
       const body = isScannerRunning ? undefined : JSON.stringify({
         paths: ['.'],
-        deep_scan: isDeepSearchEnabled,
+        deep_scan: deep,
         recovery_tokens: messages
           .filter(m => m.type === 'user')
-          .slice(-3)
           .map(m => m.text)
       });
       const res = await fetch(getApiUrl(`/scan/${endpoint}`), {

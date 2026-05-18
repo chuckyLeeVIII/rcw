@@ -5,7 +5,7 @@ from typing import Dict, Optional, List, Set
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins, Bip86, Bip86Coins,
     WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
-    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes
+    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes, Bip32KeyError
 )
 
 def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
@@ -163,23 +163,65 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
     if is_mnemonic:
         try:
             seed = Bip39SeedGenerator(norm_pwd).Generate(passphrase)
-            for coin_cls, coin_type in [(Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN), (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN)]:
-                max_accounts = 5 if exhaustive else 1
-                max_indices = 100 if exhaustive else 20
-                for acc_idx in range(max_accounts):
-                    acc_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin().Account(acc_idx)
-                    for i in range(max_indices):
-                        for chain in [Bip44Changes.CHAIN_EXT, Bip44Changes.CHAIN_INT]:
+
+            # Standard BIP paths for BTC
+            btc_variants = [
+                (Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN),
+                (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN)
+            ]
+
+            # Multi-coin support for exhaustive mode
+            if exhaustive:
+                btc_variants.extend([
+                    (Bip44, Bip44Coins.LITECOIN), (Bip49, Bip49Coins.LITECOIN), (Bip84, Bip84Coins.LITECOIN),
+                    (Bip44, Bip44Coins.DOGECOIN), (Bip44, Bip44Coins.DASH), (Bip44, Bip44Coins.BITCOIN_CASH)
+                ])
+
+            max_accounts = 5 if exhaustive else 1
+            max_indices = 100 if exhaustive else 20
+
+            for coin_cls, coin_type in btc_variants:
+                try:
+                    for acc_idx in range(max_accounts):
+                        acc_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin().Account(acc_idx)
+                        for i in range(max_indices):
+                            for chain in [Bip44Changes.CHAIN_EXT, Bip44Changes.CHAIN_INT]:
+                                try:
+                                    addr = acc_ctx.Change(chain).AddressIndex(i).PublicKey().ToAddress()
+                                    if addr in targets:
+                                        matches.append({
+                                            "type": "mnemonic", "value": norm_pwd, "address": addr,
+                                            "coin": coin_type.name, "path_index": i, "account": acc_idx,
+                                            "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
+                                            "passphrase": passphrase
+                                        })
+                                except Exception: pass
+                except Exception: pass
+
+            # Deep search extra paths (Electrum, MultiBit, etc.)
+            if exhaustive:
+                try:
+                    root_ctx = Bip32Secp256k1.FromSeed(seed)
+                    # m/0/n (Electrum Standard)
+                    # m/0'/0/n (BIP-32 Legacy)
+                    # m/0'/0 (MultiBit/BRD)
+                    extra_paths = [
+                        "m/0/0/{}", "m/0'/0/{}", "m/0'/0/0/{}", "m/44'/0'/0'/0/{}"
+                    ]
+                    for path_template in extra_paths:
+                        for i in range(max_indices):
                             try:
-                                addr = acc_ctx.Change(chain).AddressIndex(i).PublicKey().ToAddress()
+                                path = path_template.format(i)
+                                derived = root_ctx.DerivePath(path)
+                                addr = P2PKHAddr.EncodeKey(derived.PublicKey().RawCompressed().ToBytes(),
+                                                          net_ver=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).P2PKHNetVer())
                                 if addr in targets:
                                     matches.append({
-                                        "type": "mnemonic", "value": norm_pwd, "address": addr,
-                                        "path_index": i, "account": acc_idx,
-                                        "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
-                                        "passphrase": passphrase
+                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr,
+                                        "path": path, "passphrase": passphrase
                                     })
-                            except Exception: pass
+                            except (Bip32KeyError, Exception): pass
+                except Exception: pass
         except Exception: pass
 
     # 2. As raw hex key (Brainwallet or Raw)
