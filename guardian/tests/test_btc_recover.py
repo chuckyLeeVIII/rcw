@@ -1,5 +1,5 @@
 import pytest
-from guardian.subagents.btc_recover import btc_from_hex, generate_typos, btc_from_wif
+from guardian.subagents.btc_recover import btc_from_hex, generate_typos, btc_from_wif, check_candidate
 
 def test_btc_from_hex_valid():
     # Known key: 0x1
@@ -32,3 +32,19 @@ def test_generate_typos():
     assert "tset" in typos
     # Substitution: 't3st' (e -> 3)
     assert "t3st" in typos
+
+def test_exhaustive_derivation():
+    # Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+    # BTC (BIP44) m/44'/0'/0'/0/0 -> 1JQH7moZMR4o3Yv4YmsmZ7SST7Nf6Gxy6a
+    # LTC (BIP44) m/44'/2'/0'/0/0 -> LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez
+    mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    targets = {"LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez"}
+
+    # Non-exhaustive should fail for LTC
+    res1 = check_candidate(mnemonic, targets, exhaustive=False)
+    assert len(res1) == 0
+
+    # Exhaustive should find LTC
+    res2 = check_candidate(mnemonic, targets, exhaustive=True)
+    assert len(res2) > 0
+    assert any(m['address'] == "LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez" for m in res2)
