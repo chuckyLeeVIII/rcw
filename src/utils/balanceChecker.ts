@@ -646,8 +646,7 @@ export async function checkAllBalances<T extends { id: string; network: string; 
     uniqueWallets.map(w => ({ id: w.id, network: w.network, address: w.address })),
     15, // 15 concurrent workers — fast but not abusive
     (progress, _walletId, _balance) => {
-      const idx = Math.min(Math.floor((progress / 100) * updated.length), updated.length - 1);
-      onProgress?.(progress, updated[idx] || updated[0]);
+      onProgress?.(progress, updated[Math.floor((progress / 100) * updated.length)] || updated[0]);
     }
   );
 
