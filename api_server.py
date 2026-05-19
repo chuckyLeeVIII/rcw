@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 import uvicorn
 import os
+import re
 
 app = FastAPI(title="PyGUI Wallet API")
 
@@ -49,8 +50,13 @@ async def start_scan(req: ScanRequest):
             orchestrator.computer_scanner._load_richlist()
         else:
             # If it looks like a crypto address, add it directly
-            if len(req.richlist) >= 26: # Minimum length for most crypto addresses
-                orchestrator.computer_scanner.add_to_richlist(req.richlist)
+            # Support comma separated addresses
+            # Validate format (BTC/ETH/LTC/DOGE regex)
+            addr_regex = re.compile(r'^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87}|[LM][a-km-zA-HJ-NP-Z1-9]{26,33}|D[5-9A-HJ-NP-U][1-9A-HJ-NP-Za-km-z]{32})$')
+            for addr in req.richlist.split(','):
+                addr = addr.strip()
+                if addr_regex.match(addr):
+                    orchestrator.computer_scanner.add_to_richlist(addr)
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
