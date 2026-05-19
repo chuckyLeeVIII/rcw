@@ -76,14 +76,20 @@ export function RecoveryAIAssistant() {
     } else if (input.toLowerCase().startsWith('/deep-search')) {
         setIsDeepSearchEnabled(true);
         const query = input.replace('/deep-search', '').trim();
+
+        // Extract addresses from query if any
+        const addrRegex = /(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})/g;
+        const matches = query.match(addrRegex);
+        const targetAddrs = matches ? matches.join(',') : undefined;
+
         setMessages(prev => [...prev, {
             type: 'ai',
-            text: `DEEP_SEARCH_ARMED: Exhaustive mutation engine active. Ingesting session intelligence... ${query ? `Target: ${query}` : ''}`,
+            text: `DEEP_SEARCH_ARMED: Exhaustive mutation engine active. Ingesting session intelligence... ${targetAddrs ? `Target: ${targetAddrs}` : ''}`,
             time: new Date()
         }]);
         // Trigger scan automatically if not running
         if (!isScannerRunning) {
-            setTimeout(() => toggleScanner(true), 500);
+            setTimeout(() => toggleScanner(true, targetAddrs), 500);
         }
     } else if (input.toLowerCase() === 'start mixhunter') {
         toggleMixHunter();
@@ -109,16 +115,18 @@ export function RecoveryAIAssistant() {
     setChatInput('');
   };
 
-  const toggleScanner = async (forceDeep?: boolean) => {
+  const toggleScanner = async (forceDeep?: boolean, richlist?: string) => {
     try {
       const deep = forceDeep ?? isDeepSearchEnabled;
       const endpoint = isScannerRunning ? 'stop' : 'start';
       const body = isScannerRunning ? undefined : JSON.stringify({
         paths: ['.'],
         deep_scan: deep,
+        richlist: richlist,
         recovery_tokens: messages
           .filter(m => m.type === 'user')
           .map(m => m.text)
+          .filter(t => !t.startsWith('/'))
       });
       const res = await fetch(getApiUrl(`/scan/${endpoint}`), {
         method: 'POST',

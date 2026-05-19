@@ -5,8 +5,10 @@ from typing import Dict, Optional, List, Set
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins, Bip86, Bip86Coins,
     WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
-    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes, Bip32KeyError
+    P2PKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes, Bip32KeyError,
+    Bip39Languages
 )
+from bip_utils.bip.bip39.bip39_mnemonic_utils import Bip39WordsListGetter
 
 def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
     """Derive BTC addresses from hex private key across Legacy, SegWit, and Nested SegWit"""
@@ -105,7 +107,8 @@ def generate_typos(token: str) -> Set[str]:
         {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
          'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
          'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
-        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v'}
+        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v'},
+        {' ': '', '_': '', '-': '', '.': ''}
     ]
     for subs in subs_list:
         for i, c in enumerate(chars):
@@ -114,16 +117,25 @@ def generate_typos(token: str) -> Set[str]:
                 c2[i] = subs[c.lower()]
                 typos.add("".join(c2))
 
-    # 4. Insertions (duplicate characters)
+    # 4. Insertions (duplicate characters and common padding)
     for i in range(len(chars)):
         typos.add("".join(chars[:i] + [chars[i]] + chars[i:]))
 
-    # 5. Reversal
+    # 5. Casing
+    typos.add(token.lower())
+    typos.add(token.upper())
+    typos.add(token.capitalize())
+    if " " in token:
+        typos.add(token.title())
+
+    # 6. Reversal
     typos.add(token[::-1])
 
-    # 6. Visual mutations (m -> rn, etc)
+    # 7. Visual mutations (m -> rn, etc)
     if 'm' in token: typos.add(token.replace('m', 'rn'))
     if 'rn' in token: typos.add(token.replace('rn', 'm'))
+    if '0' in token: typos.add(token.replace('0', 'O'))
+    if '1' in token: typos.add(token.replace('1', 'l'))
 
     return typos
 
@@ -155,14 +167,32 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
     # 1. As mnemonic
     norm_pwd = " ".join(pwd.lower().split())
-    is_mnemonic = False
-    try:
-        is_mnemonic = Bip39MnemonicValidator().IsValid(norm_pwd)
-    except Exception: pass
+    words = norm_pwd.split()
 
-    if is_mnemonic:
+    candidates = [norm_pwd]
+
+    # Missing word recovery (11 or 23 words, or middle word if 12/24)
+    if exhaustive:
+        wordlist_obj = Bip39WordsListGetter().GetByLanguage(Bip39Languages.ENGLISH)
+        if len(words) == 11 or len(words) == 23:
+            # Try appending missing word at end
+            for i in range(wordlist_obj.Length()):
+                candidates.append(norm_pwd + " " + wordlist_obj.GetWordAtIdx(i))
+        elif (len(words) == 12 or len(words) == 24):
+             # If it looks like a mnemonic with a potentially wrong word, we could try swapping words,
+             # but let's stick to adding the tokens to permutations which generate_permutations already does.
+             pass
+
+    for cand_pwd in candidates:
+        is_mnemonic = False
         try:
-            seed = Bip39SeedGenerator(norm_pwd).Generate(passphrase)
+            is_mnemonic = Bip39MnemonicValidator().IsValid(cand_pwd)
+        except Exception: pass
+
+        if not is_mnemonic: continue
+
+        try:
+            seed = Bip39SeedGenerator(cand_pwd).Generate(passphrase)
 
             # Standard BIP paths for BTC
             btc_variants = [
@@ -190,7 +220,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                     addr = acc_ctx.Change(chain).AddressIndex(i).PublicKey().ToAddress()
                                     if addr in targets:
                                         matches.append({
-                                            "type": "mnemonic", "value": norm_pwd, "address": addr,
+                                            "type": "mnemonic", "value": cand_pwd, "address": addr,
                                             "coin": coin_type.name, "path_index": i, "account": acc_idx,
                                             "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
                                             "passphrase": passphrase
@@ -206,7 +236,9 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                     # m/0'/0/n (BIP-32 Legacy)
                     # m/0'/0 (MultiBit/BRD)
                     extra_paths = [
-                        "m/0/0/{}", "m/0'/0/{}", "m/0'/0/0/{}", "m/44'/0'/0'/0/{}"
+                        "m/0/0/{}", "m/0'/0/{}", "m/0'/0/0/{}", "m/44'/0'/0'/0/{}",
+                        "m/145'/0'/0'/0/{}", "m/0/{}", "m/45'/0/0/0/{}",
+                        "m/48'/0'/0'/1'/0/{}", "m/48'/0'/0'/2'/0/{}"
                     ]
                     for path_template in extra_paths:
                         for i in range(max_indices):
@@ -217,7 +249,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                                           net_ver=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).P2PKHNetVer())
                                 if addr in targets:
                                     matches.append({
-                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr,
+                                        "type": "mnemonic_extra_path", "value": cand_pwd, "address": addr,
                                         "path": path, "passphrase": passphrase
                                     })
                             except (Bip32KeyError, Exception): pass
@@ -292,8 +324,8 @@ def run_btcrecover_scan(
         # For exhaustive, we also try cross-pollinating tokens as passphrases for mnemonics
         passphrases = [""]
         if exhaustive:
-            # Add top 5 candidates as potential passphrases to avoid explosion but catch common ones
-            passphrases.extend(list(candidates)[:5])
+            # Add top 15 candidates as potential passphrases to avoid explosion but catch common ones
+            passphrases.extend(list(candidates)[:15])
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
             all_futures = []
