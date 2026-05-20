@@ -118,7 +118,8 @@ export function RecoveryAIAssistant() {
         deep_scan: deep,
         recovery_tokens: messages
           .filter(m => m.type === 'user')
-          .map(m => m.text)
+          .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
+          .filter(t => t.length > 0)
       });
       const res = await fetch(getApiUrl(`/scan/${endpoint}`), {
         method: 'POST',

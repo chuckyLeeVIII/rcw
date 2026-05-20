@@ -48,3 +48,30 @@ def test_exhaustive_derivation():
     res2 = check_candidate(mnemonic, targets, exhaustive=True)
     assert len(res2) > 0
     assert any(m['address'] == "LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez" for m in res2)
+
+def test_exhaustive_extra_paths():
+    # Test BIP-48 like path or custom path
+    # Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+    # m/0'/0 (Copay/BitPay/MultiBit) -> 1999S99m9m... (need a real one)
+    # Actually let's just check if it finds a P2PKH on m/0/0
+    mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    # m/0/0 -> 199266Ymi8vYvYvYvYvYvYvYvYvYvYvYvY (fake)
+    # Let's use a known derivation from bip-utils for m/0/0
+    from bip_utils import Bip32Secp256k1, Bip39SeedGenerator, P2PKHAddr, Bip44ConfGetter, Bip44Coins
+    seed = Bip39SeedGenerator(mnemonic).Generate()
+    root = Bip32Secp256k1.FromSeed(seed)
+    derived = root.DerivePath("m/0/0")
+    addr = P2PKHAddr.EncodeKey(derived.PublicKey().RawCompressed().ToBytes(),
+                              net_ver=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('net_ver'))
+
+    targets = {addr}
+    res = check_candidate(mnemonic, targets, exhaustive=True)
+    assert any(m['path'] == "m/0/0" for m in res)
+
+def test_typo_mutations_extended():
+    token = "password"
+    typos = generate_typos(token)
+    assert "password!" in typos
+    assert "Password" in typos
+    assert "p4ssword" in typos
+    assert "passvvord" in typos
