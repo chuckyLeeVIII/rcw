@@ -255,7 +255,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                         matches.append({"type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh, "path": path, "format": "p2wpkh"})
                                 except Exception: pass
 
-                            except (Bip32KeyError, Exception): pass
+                            except Exception: pass
                 except Exception: pass
         except Exception: pass
 
