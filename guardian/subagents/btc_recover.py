@@ -183,10 +183,11 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
              # but let's stick to adding the tokens to permutations which generate_permutations already does.
              pass
 
+    validator = Bip39MnemonicValidator()
     for cand_pwd in candidates:
         is_mnemonic = False
         try:
-            is_mnemonic = Bip39MnemonicValidator().IsValid(cand_pwd)
+            is_mnemonic = validator.IsValid(cand_pwd)
         except Exception: pass
 
         if not is_mnemonic: continue
