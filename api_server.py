@@ -52,10 +52,9 @@ async def start_scan(req: ScanRequest):
             # If it looks like a crypto address, add it directly
             # Support comma separated addresses
             # Validate format (BTC/ETH/LTC/DOGE regex)
-            addr_regex = re.compile(r'^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87}|[LM][a-km-zA-HJ-NP-Z1-9]{26,33}|D[5-9A-HJ-NP-U][1-9A-HJ-NP-Za-km-z]{32})$')
             for addr in req.richlist.split(','):
                 addr = addr.strip()
-                if addr_regex.match(addr):
+                if ADDR_REGEX.match(addr):
                     orchestrator.computer_scanner.add_to_richlist(addr)
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
