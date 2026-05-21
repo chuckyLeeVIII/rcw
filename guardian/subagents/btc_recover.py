@@ -253,7 +253,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                                                      hrp=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('hrp'))
                                     if addr_p2wpkh in targets:
                                         matches.append({"type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh, "path": path, "format": "p2wpkh"})
-                                except: pass
+                                except Exception: pass
 
                             except (Bip32KeyError, Exception): pass
                 except Exception: pass
