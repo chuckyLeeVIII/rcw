@@ -250,7 +250,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                 # 2. SegWit P2WPKH (Bech32)
                                 try:
                                     addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_bytes,
-                                                                     hrp=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams()['hrp'])
+                                                                     hrp=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('hrp'))
                                     if addr_p2wpkh in targets:
                                         matches.append({"type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh, "path": path, "format": "p2wpkh"})
                                 except: pass
