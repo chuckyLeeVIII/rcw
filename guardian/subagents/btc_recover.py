@@ -194,7 +194,6 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                     pub_key = node.PublicKey()
 
                                     # In exhaustive mode, check ALL address types for every path
-                                    pub_key = node.PublicKey()
                                     pub_bytes = pub_key.RawCompressed().ToBytes()
 
                                     check_addresses = []
