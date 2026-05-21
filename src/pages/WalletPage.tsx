@@ -4,7 +4,6 @@ import { cryptoList } from '../data/cryptoList';
 import { WalletRecovery } from '../components/WalletRecovery';
 import { Wallet, Copy, ExternalLink, Shield, RefreshCw, Loader2 } from 'lucide-react';
 import { checkBalancesBatch, getApiHealth } from '../utils/balanceChecker';
-import { NETWORKS } from '../config/app';
 
 export function WalletPage() {
   const { address, isConnected } = useAccount();
@@ -17,12 +16,21 @@ export function WalletPage() {
     if (!isConnected || !address) return;
     setLoading(true);
 
-    // Build wallet list: each supported network mapped to this address
-    const wallets = NETWORKS.map(net => ({
-      id: net.id,
-      network: net.name,
-      address,
-    }));
+    // Build wallet list using canonical balance-checker network ids.
+    // This includes both EVM and UTXO chains shown on the wallet grid.
+    const wallets = [
+      { id: 'bitcoin', network: 'bitcoin', address },
+      { id: 'ethereum', network: 'ethereum', address },
+      { id: 'litecoin', network: 'litecoin', address },
+      { id: 'dogecoin', network: 'dogecoin', address },
+      { id: 'dash', network: 'dash', address },
+      { id: 'polygon', network: 'polygon', address },
+      { id: 'arbitrum', network: 'arbitrum', address },
+      { id: 'optimism', network: 'optimism', address },
+      { id: 'base', network: 'base', address },
+      { id: 'bsc', network: 'bsc', address },
+      { id: 'avalanche', network: 'avalanche', address },
+    ];
 
     try {
       const results = await checkBalancesBatch(wallets, 4, () => { });
@@ -70,38 +78,38 @@ export function WalletPage() {
 
   // Map crypto symbols to network IDs for display
   const symbolToNetworkId: Record<string, string> = {
-    BTC: 'Bitcoin',
-    ETH: 'eth-mainnet',
-    LTC: 'Litecoin',
-    DOGE: 'Dogecoin',
-    DASH: 'Dash',
-    USDT: 'eth-mainnet',
-    USDC: 'eth-mainnet',
+    BTC: 'bitcoin',
+    ETH: 'ethereum',
+    LTC: 'litecoin',
+    DOGE: 'dogecoin',
+    DASH: 'dash',
+    USDT: 'ethereum',
+    USDC: 'ethereum',
     BNB: 'bsc',
     XRP: 'ethereum',
     ADA: 'ethereum',
     DOT: 'ethereum',
-    AAVE: 'eth-mainnet',
-    UNI: 'eth-mainnet',
+    AAVE: 'ethereum',
+    UNI: 'ethereum',
     CAKE: 'bsc',
-    SUSHI: 'eth-mainnet',
-    CRV: 'eth-mainnet',
+    SUSHI: 'ethereum',
+    CRV: 'ethereum',
     SOL: 'ethereum',
     AVAX: 'avalanche',
     MATIC: 'polygon',
     OP: 'optimism',
     ARB: 'arbitrum',
-    SHIB: 'eth-mainnet',
-    PEPE: 'eth-mainnet',
-    FLOKI: 'eth-mainnet',
-    SAND: 'eth-mainnet',
-    MANA: 'eth-mainnet',
+    SHIB: 'ethereum',
+    PEPE: 'ethereum',
+    FLOKI: 'ethereum',
+    SAND: 'ethereum',
+    MANA: 'ethereum',
     AXS: 'ethereum',
-    LINK: 'eth-mainnet',
-    GRT: 'eth-mainnet',
+    LINK: 'ethereum',
+    GRT: 'ethereum',
     FIL: 'ethereum',
     CRO: 'ethereum',
-    FTT: 'eth-mainnet',
+    FTT: 'ethereum',
     KCS: 'ethereum',
     ATOM: 'ethereum',
     ALGO: 'ethereum',
@@ -210,9 +218,9 @@ export function WalletPage() {
       {!loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {cryptoList.map((crypto) => {
-            const networkId = symbolToNetworkId[crypto.symbol] || 'eth-mainnet';
+            const networkId = symbolToNetworkId[crypto.symbol] || 'ethereum';
             const bal = getBalanceForNetwork(networkId);
-            const isFetched = NETWORKS.some(n => n.id === networkId);
+            const isFetched = wallets.some(w => w.id === networkId);
             const balanceValue = bal ? bal.confirmed.toFixed(8) : isFetched ? '0.00000000' : '--';
             const source = bal?.source || (isFetched ? 'pending' : 'unsupported');
 

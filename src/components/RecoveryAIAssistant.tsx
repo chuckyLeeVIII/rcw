@@ -182,12 +182,42 @@ export function RecoveryAIAssistant() {
           text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. Adding to recovery pool...`,
           time: new Date()
         }]);
-        // Implementation for feeding to pool would go here
+        let recovered = 0;
+
+        // Keys and key-like shards are treated as direct key material candidates.
+        for (const key of [...parsed.keys, ...parsed.shards]) {
+          const candidate = key.replace(/^Keystore:\s*/i, '').trim();
+          if (!candidate || candidate.includes('xprv:')) continue;
+          try {
+            await recoveryPool.recoverFromPrivateKey(candidate);
+            recovered += 1;
+          } catch {
+            // best-effort per artifact
+          }
+        }
+
+        // Seeds are validated/balance-checked by recovery pool flow.
+        for (const seed of parsed.seeds) {
+          const cleaned = seed.replace(/^HD Wallet:\s*/i, '').trim();
+          if (!cleaned || cleaned.startsWith('m/')) continue;
+          try {
+            await recoveryPool.recoverFromSeed(cleaned);
+            recovered += 1;
+          } catch {
+            // best-effort per artifact
+          }
+        }
+
+        setMessages(prev => [...prev, {
+          type: 'ai',
+          text: `POOL_SYNC_COMPLETE: ${file.name} processed. Validated artifacts routed to active recovery pool and master list. Recovered flows: ${recovered}.`,
+          time: new Date()
+        }]);
       } catch (err) {
         setMessages(prev => [...prev, { type: 'ai', text: `ERROR: Failed to parse ${file.name}`, time: new Date() }]);
       }
     }
-  }, []);
+  }, [recoveryPool]);
 
   return (
     <div className="flex flex-col h-[700px] bg-[#050810] border border-cyan-500/30 rounded-xl overflow-hidden relative shadow-[0_0_50px_rgba(6,182,212,0.1)]">
