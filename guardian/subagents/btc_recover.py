@@ -255,8 +255,8 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                     pub_key_bytes = derived.PublicKey().RawCompressed().ToBytes()
 
                                     # Native SegWit (P2WPKH)
-                                    addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes,
-                                                                    hrp=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams()['hrp'])
+                                    # Native SegWit (P2WPKH)
+                                    addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes, hrp=hrp)
                                     if addr_p2wpkh in targets:
                                         matches.append({
                                             "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh,
@@ -265,9 +265,8 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
                                     # Nested SegWit (P2SH-P2WPKH)
                                     try:
-                                        # Use Bip49 to easily get P2SH-P2WPKH for the derived private key if it exists
-                                        priv_bytes = derived.PrivateKey().Raw().ToBytes()
-                                        bip49_ctx = Bip49.FromPrivateKey(priv_bytes, Bip49Coins.BITCOIN)
+                                        # Use Bip49 to easily get P2SH-P2WPKH from the public key
+                                        bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, Bip49Coins.BITCOIN)
                                         addr_p2sh = bip49_ctx.PublicKey().ToAddress()
                                         if addr_p2sh in targets:
                                             matches.append({
