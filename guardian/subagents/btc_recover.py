@@ -243,7 +243,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
                                 # Check P2PKH (Legacy)
                                 addr_p2pkh = P2PKHAddr.EncodeKey(derived.PublicKey().RawCompressed().ToBytes(),
-                                                          net_ver=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('net_ver'))
+                                                          net_ver=net_ver)
                                 if addr_p2pkh in targets:
                                     matches.append({
                                         "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2pkh,
