@@ -143,7 +143,10 @@ export function HistoryPage() {
       const matchesSearch =
         tx.hash.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tx.to.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.from.toLowerCase().includes(searchTerm.toLowerCase());
+        tx.from.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx.network.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tx.type.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFilter = filter === 'all' || tx.status === filter;
       const matchesNetwork = networkFilter === 'all' || tx.network === networkFilter;
       let matchesTimeRange = true;
@@ -245,7 +248,7 @@ export function HistoryPage() {
       case 'pending':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse">
-            <Clock className="w-3 h-3" /> Pending
+            <Clock className="w-3 h-3" /> Unconfirmed
           </span>
         );
       case 'failed':
@@ -355,7 +358,7 @@ export function HistoryPage() {
             <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-500" />
             <input
               type="text"
-              placeholder="Search by hash, address..."
+              placeholder="Search by hash, address, network, status..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               className="w-full bg-gray-800/50 border border-gray-700/50 rounded-lg pl-10 pr-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/30 transition-all"

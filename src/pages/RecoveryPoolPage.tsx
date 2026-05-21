@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRecoveryPool } from '../context/RecoveryPoolContext';
 import {
   RefreshCw,
@@ -42,11 +42,50 @@ export function RecoveryPoolPage() {
   const discoveredWallets = recoveryPool.discoveredWallets || [];
   const totalBalance = recoveryPool.totalBalance || {};
 
-  const filteredWallets = discoveredWallets.filter(w => {
-    if (filter === 'funded' && w.balance <= 0 && w.unconfirmedBalance <= 0) return false;
-    if (filterNetwork !== 'all' && w.network !== filterNetwork) return false;
-    return true;
-  });
+  const filteredWallets = useMemo(() => {
+    const base = discoveredWallets.filter((w) => {
+      if (filter === 'funded' && w.balance <= 0 && w.unconfirmedBalance <= 0) return false;
+      if (filterNetwork !== 'all' && w.network !== filterNetwork) return false;
+      return true;
+    });
+
+    // Funded/unconfirmed accounts first, then highest balance first.
+    return [...base].sort((a, b) => {
+      const aFunded = (a.balance + a.unconfirmedBalance) > 0 ? 1 : 0;
+      const bFunded = (b.balance + b.unconfirmedBalance) > 0 ? 1 : 0;
+      if (aFunded !== bFunded) return bFunded - aFunded;
+      const aTotal = a.balance + a.unconfirmedBalance;
+      const bTotal = b.balance + b.unconfirmedBalance;
+      if (aTotal !== bTotal) return bTotal - aTotal;
+      return (b.lastChecked || 0) - (a.lastChecked || 0);
+    });
+  }, [discoveredWallets, filter, filterNetwork]);
+
+  // Live scanner-hit import + periodic balance refresh
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(getApiUrl('/scan/results?limit=50'));
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.hits) && data.hits.length > 0) {
+          await recoveryPool.importScannerResults(data.hits);
+        }
+      } catch {
+        // no-op
+      }
+      if (!cancelled && discoveredWallets.length > 0 && !recoveryPool.isScanning) {
+        recoveryPool.refreshBalances().catch(() => {});
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [recoveryPool, discoveredWallets.length]);
 
   const networkCount = new Set(discoveredWallets.map(w => w.network)).size;
 
