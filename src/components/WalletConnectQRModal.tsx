@@ -4,7 +4,7 @@ import { X, QrCode } from 'lucide-react';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  uri: string;
+  uri?: string;
 }
 
 export function WalletConnectQRModal({ isOpen, onClose, uri }: Props) {
@@ -26,7 +26,7 @@ export function WalletConnectQRModal({ isOpen, onClose, uri }: Props) {
         <div className="bg-white p-4 rounded-xl mb-6">
           <div className="aspect-square bg-gray-200 rounded flex items-center justify-center text-gray-500">
             {/* Real QR would go here */}
-            [QR CODE: {uri.slice(0, 20)}...]
+            [QR CODE: {(uri || 'wc://active-recovery-pool').slice(0, 28)}...]
           </div>
         </div>
 

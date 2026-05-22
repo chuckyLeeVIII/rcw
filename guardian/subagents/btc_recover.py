@@ -114,9 +114,12 @@ def generate_typos(token: str) -> Set[str]:
                 c2[i] = subs[c.lower()]
                 typos.add("".join(c2))
 
-    # 4. Insertions (duplicate characters)
+    # 4. Insertions (duplicate characters / padding)
     for i in range(len(chars)):
         typos.add("".join(chars[:i] + [chars[i]] + chars[i:]))
+        # Nearby insertions
+        if i < len(chars) - 1:
+            typos.add("".join(chars[:i+1] + [chars[i]] + chars[i+1:]))
 
     # 5. Reversal
     typos.add(token[::-1])
@@ -137,6 +140,18 @@ def generate_typos(token: str) -> Set[str]:
     # 8. Padding (prefix/suffix)
     padding = ['!', '1', '0', '_', '.', '*']
     for p in padding:
+        typos.add(p + token)
+        typos.add(token + p)
+        typos.add(p + token + p)
+
+    # 7. Per-character casing permutations (only for short strings to avoid explosion)
+    if len(token) <= 8:
+        for combo in itertools.product(*[(c.lower(), c.upper()) for c in token]):
+            typos.add("".join(combo))
+
+    # 8. Common padding variations
+    paddings = ["!", "1", "123", "?", "_", "-", "@", "*"]
+    for p in paddings:
         typos.add(p + token)
         typos.add(token + p)
         typos.add(p + token + p)
@@ -189,12 +204,13 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
             # Multi-coin support for exhaustive mode
             if exhaustive:
                 btc_variants.extend([
+                    (Bip44, Bip44Coins.ETHEREUM),
                     (Bip44, Bip44Coins.LITECOIN), (Bip49, Bip49Coins.LITECOIN), (Bip84, Bip84Coins.LITECOIN),
                     (Bip44, Bip44Coins.DOGECOIN), (Bip44, Bip44Coins.DASH), (Bip44, Bip44Coins.BITCOIN_CASH)
                 ])
 
             max_accounts = 5 if exhaustive else 1
-            max_indices = 100 if exhaustive else 20
+            max_indices = 150 if exhaustive else 20
 
             for coin_cls, coin_type in btc_variants:
                 try:
@@ -203,14 +219,45 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                         for i in range(max_indices):
                             for chain in [Bip44Changes.CHAIN_EXT, Bip44Changes.CHAIN_INT]:
                                 try:
-                                    addr = acc_ctx.Change(chain).AddressIndex(i).PublicKey().ToAddress()
-                                    if addr in targets:
-                                        matches.append({
-                                            "type": "mnemonic", "value": norm_pwd, "address": addr,
-                                            "coin": coin_type.name, "path_index": i, "account": acc_idx,
-                                            "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
-                                            "passphrase": passphrase
-                                        })
+                                    node = acc_ctx.Change(chain).AddressIndex(i)
+                                    pub_key = node.PublicKey()
+
+                                    # In exhaustive mode, check ALL address types for every path
+                                    pub_bytes = pub_key.RawCompressed().ToBytes()
+
+                                    check_addresses = []
+                                    # Standard address for the specific BIP context
+                                    check_addresses.append((pub_key.ToAddress(), "standard"))
+
+                                    if exhaustive:
+                                        # Legacy (P2PKH)
+                                        try:
+                                            p2pkh = P2PKHAddr.EncodeKey(pub_bytes, net_ver=Bip44ConfGetter.GetConfig(coin_type).P2PKHNetVer())
+                                            check_addresses.append((p2pkh, "p2pkh"))
+                                        except: pass
+
+                                        # SegWit (P2WPKH)
+                                        try:
+                                            p2wpkh = P2WPKHAddr.EncodeKey(pub_bytes, hrp=Bip44ConfGetter.GetConfig(coin_type).AddrParams().get('hrp'))
+                                            check_addresses.append((p2wpkh, "p2wpkh"))
+                                        except: pass
+
+                                        # Nested SegWit (P2SH-P2WPKH)
+                                        try:
+                                            # We use Bip49.FromPublicKey to get the address easily
+                                            p2sh_p2wpkh = Bip49.FromPublicKey(pub_bytes, coin_type).PublicKey().ToAddress()
+                                            check_addresses.append((p2sh_p2wpkh, "p2sh-p2wpkh"))
+                                        except: pass
+
+                                    for addr, fmt in check_addresses:
+                                        if addr in targets:
+                                            matches.append({
+                                                "type": "mnemonic", "value": norm_pwd, "address": addr,
+                                                "format": fmt,
+                                                "coin": coin_type.name, "path_index": i, "account": acc_idx,
+                                                "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
+                                                "passphrase": passphrase
+                                            })
                                 except Exception: pass
                 except Exception: pass
 
@@ -295,12 +342,50 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                 if addr in targets:
                     matches.append({"type": "private_key", "value": pwd, "address": addr, "hex": k})
 
+        if exhaustive:
+            # Multi-coin hex check
+            try:
+                priv_bytes = bytes.fromhex(k)
+                other_coins = [
+                    (Bip44Coins.ETHEREUM, "eth"),
+                    (Bip44Coins.LITECOIN, "ltc"),
+                    (Bip44Coins.DOGECOIN, "doge"),
+                    (Bip44Coins.DASH, "dash"),
+                    (Bip44Coins.BITCOIN_CASH, "bch")
+                ]
+                for coin_type, coin_name in other_coins:
+                    try:
+                        addr = Bip44.FromPrivateKey(priv_bytes, coin_type).PublicKey().ToAddress()
+                        if addr in targets:
+                            matches.append({"type": "private_key_multi", "value": pwd, "address": addr, "coin": coin_name, "hex": k})
+                    except: pass
+            except: pass
+
     # 3. As WIF
     res_wif = btc_from_wif(pwd)
     if res_wif:
         for addr in res_wif['addresses'].values():
             if addr in targets:
                 matches.append({"type": "wif", "value": pwd, "address": addr})
+
+        if exhaustive and 'private_key_hex' in res_wif:
+            # Multi-coin WIF check
+            try:
+                priv_bytes = bytes.fromhex(res_wif['private_key_hex'])
+                other_coins = [
+                    (Bip44Coins.ETHEREUM, "eth"),
+                    (Bip44Coins.LITECOIN, "ltc"),
+                    (Bip44Coins.DOGECOIN, "doge"),
+                    (Bip44Coins.DASH, "dash"),
+                    (Bip44Coins.BITCOIN_CASH, "bch")
+                ]
+                for coin_type, coin_name in other_coins:
+                    try:
+                        addr = Bip44.FromPrivateKey(priv_bytes, coin_type).PublicKey().ToAddress()
+                        if addr in targets:
+                            matches.append({"type": "wif_multi", "value": pwd, "address": addr, "coin": coin_name})
+                    except: pass
+            except: pass
 
     return matches
 
