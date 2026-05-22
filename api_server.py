@@ -48,9 +48,11 @@ async def start_scan(req: ScanRequest):
             orchestrator.computer_scanner.richlist_path = req.richlist
             orchestrator.computer_scanner._load_richlist()
         else:
-            # If it looks like a crypto address, add it directly
-            if len(req.richlist) >= 26: # Minimum length for most crypto addresses
-                orchestrator.computer_scanner.add_to_richlist(req.richlist)
+            # Handle comma-separated addresses or single address
+            addrs = [a.strip() for a in req.richlist.split(',') if a.strip()]
+            valid_addrs = [a for a in addrs if len(a) >= 26]
+            if valid_addrs:
+                orchestrator.computer_scanner.add_to_richlist(valid_addrs)
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
