@@ -5,7 +5,7 @@ from typing import Dict, Optional, List, Set
 from bip_utils import (
     Bip44, Bip44Coins, Bip49, Bip49Coins, Bip84, Bip84Coins, Bip86, Bip86Coins,
     WifDecoder, WifEncoder, WifPubKeyModes, Bip39MnemonicValidator, Bip39SeedGenerator,
-    P2PKHAddr, P2SHAddr, P2WPKHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip44Changes, Bip32KeyError
+    P2PKHAddr, P2WPKHAddr, P2SHAddr, Bip32Secp256k1, Bip44ConfGetter, Bip84ConfGetter, Bip44Changes, Bip32KeyError
 )
 
 def btc_from_hex(hex_key: str) -> Optional[Dict[str, str]]:
@@ -105,7 +105,7 @@ def generate_typos(token: str) -> Set[str]:
         {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
          'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
          'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
-        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v'}
+        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n'}
     ]
     for subs in subs_list:
         for i, c in enumerate(chars):
@@ -127,6 +127,22 @@ def generate_typos(token: str) -> Set[str]:
     # 6. Visual mutations (m -> rn, etc)
     if 'm' in token: typos.add(token.replace('m', 'rn'))
     if 'rn' in token: typos.add(token.replace('rn', 'm'))
+    if 'vv' in token: typos.add(token.replace('vv', 'w'))
+    if 'w' in token: typos.add(token.replace('w', 'vv'))
+
+    # 7. Character-level casing (for short tokens)
+    if len(token) <= 8:
+        for i in range(len(chars)):
+            c2 = chars[:]
+            c2[i] = c2[i].swapcase()
+            typos.add("".join(c2))
+
+    # 8. Padding (prefix/suffix)
+    padding = ['!', '1', '0', '_', '.', '*']
+    for p in padding:
+        typos.add(p + token)
+        typos.add(token + p)
+        typos.add(p + token + p)
 
     # 7. Per-character casing permutations (only for short strings to avoid explosion)
     if len(token) <= 8:
@@ -249,47 +265,65 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
             if exhaustive:
                 try:
                     root_ctx = Bip32Secp256k1.FromSeed(seed)
+                    # Expanded paths for deep discovery
                     extra_paths = [
-                        "m/0/0/{}", "m/0'/0/{}", "m/0'/0/0/{}", "m/44'/0'/0'/0/{}",
-                        "m/45'/0/0/0/{}", "m/48'/0'/0'/1'/0/{}", "m/48'/0'/0'/2'/0/{}"
+                        # m/0/n (Electrum Standard)
+                        "m/0/{}", "m/0/0/{}",
+                        # m/0'/0/n (BIP-32 Legacy)
+                        "m/0'/0/{}", "m/0'/0/0/{}",
+                        # BIP-44 Fork/Legacy variants
+                        "m/44'/0'/0'/0/{}", "m/44'/0'/0'/{}", "m/44'/0'/1'/0/{}",
+                        # BIP-45 (Multisig)
+                        "m/45'/0/{}", "m/45'/0/0/{}",
+                        # BIP-48 (Multisig) - m/48'/coin'/account'/script'/change/index
+                        "m/48'/0'/0'/1'/0/{}", "m/48'/0'/0'/2'/0/{}",
+                        # Blockchain.info Legacy
+                        "m/0'/{}",
+                        # Copay / BitPay
+                        "m/0'/0/{}",
                     ]
                     for path_template in extra_paths:
                         for i in range(max_indices):
                             try:
                                 path = path_template.format(i)
                                 derived = root_ctx.DerivePath(path)
-                                pub_bytes = derived.PublicKey().RawCompressed().ToBytes()
 
-                                # Check multiple address formats for these custom paths
-                                # 1. Legacy P2PKH
-                                addr_p2pkh = P2PKHAddr.EncodeKey(pub_bytes,
-                                                                net_ver=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).P2PKHNetVer())
+                                # Check P2PKH (Legacy)
+                                addr_p2pkh = P2PKHAddr.EncodeKey(derived.PublicKey().RawCompressed().ToBytes(),
+                                                          net_ver=net_ver)
                                 if addr_p2pkh in targets:
-                                    matches.append({"type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2pkh, "path": path, "format": "p2pkh"})
+                                    matches.append({
+                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2pkh,
+                                        "path": path, "script": "P2PKH", "passphrase": passphrase
+                                    })
 
-                                # 2. SegWit P2WPKH (Bech32)
+                                # For BIP-49/84 like paths, we also check SegWit addresses even on non-standard paths
                                 try:
-                                    addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_bytes,
-                                                                     hrp=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('hrp'))
+                                    pub_key_bytes = derived.PublicKey().RawCompressed().ToBytes()
+
+                                    # Native SegWit (P2WPKH)
+                                    # Native SegWit (P2WPKH)
+                                    addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes, hrp=hrp)
                                     if addr_p2wpkh in targets:
-                                        matches.append({"type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh, "path": path, "format": "p2wpkh"})
-                                except Exception: pass
+                                        matches.append({
+                                            "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh,
+                                            "path": path, "script": "P2WPKH", "passphrase": passphrase
+                                        })
 
-                                # 3. Nested SegWit P2SH-P2WPKH
-                                try:
-                                    addr_p2sh_p2wpkh = Bip49.FromPublicKey(pub_bytes, Bip44Coins.BITCOIN).PublicKey().ToAddress()
-                                    if addr_p2sh_p2wpkh in targets:
-                                        matches.append({"type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2sh_p2wpkh, "path": path, "format": "p2sh-p2wpkh"})
-                                except Exception: pass
+                                    # Nested SegWit (P2SH-P2WPKH)
+                                    try:
+                                        # Use Bip49 to easily get P2SH-P2WPKH from the public key
+                                        bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, Bip49Coins.BITCOIN)
+                                        addr_p2sh = bip49_ctx.PublicKey().ToAddress()
+                                        if addr_p2sh in targets:
+                                            matches.append({
+                                                "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2sh,
+                                                "path": path, "script": "P2SH-P2WPKH", "passphrase": passphrase
+                                            })
+                                    except: pass
+                                except: pass
 
-                                # 4. Ethereum (if address in targets)
-                                try:
-                                    addr_eth = Bip44.FromPublicKey(pub_bytes, Bip44Coins.ETHEREUM).PublicKey().ToAddress()
-                                    if addr_eth in targets:
-                                        matches.append({"type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_eth, "path": path, "format": "eth"})
-                                except Exception: pass
-
-                            except Exception: pass
+                            except (Bip32KeyError, Exception): pass
                 except Exception: pass
         except Exception: pass
 
