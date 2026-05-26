@@ -196,6 +196,25 @@ class ComputerScannerAgent:
             self._richlist.add(address)
             print(f"[ComputerScanner] Added {address} to active richlist. Total: {len(self._richlist)}")
 
+    def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None):
+        """Dynamic intelligence feeding from AI Assistant"""
+        if addresses:
+            self.add_to_richlist(addresses)
+
+        if tokens:
+            added_count = 0
+            for t in tokens:
+                if t and t not in self.btc_recover_tokens:
+                    self.btc_recover_tokens.append(t)
+                    added_count += 1
+            print(f"[ComputerScanner] Ingested {added_count} new recovery tokens from assistant")
+
+        # If a scan is already running, we might want to re-trigger a targeted recovery scan
+        # with the new intelligence if the current scan hasn't finished yet.
+        # For now, we update the state so the next scan (or current if it reaches that part) uses it.
+        if self.is_running and (tokens or addresses):
+            print("[ComputerScanner] Intelligence update received during active scan")
+
     def _run_scan(self):
         print(f"[ComputerScanner] Starting scan. Deep scan: {self.deep_scan}")
 

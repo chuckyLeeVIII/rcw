@@ -26,6 +26,10 @@ class ScanRequest(BaseModel):
     check_balances: bool = True
     recovery_tokens: Optional[List[str]] = None
 
+class FeedRequest(BaseModel):
+    tokens: Optional[List[str]] = None
+    addresses: Optional[List[str]] = None
+
 @app.get("/api/status")
 async def get_status():
     if not orchestrator:
@@ -115,3 +119,14 @@ async def get_prices():
     if not orchestrator:
         return {"error": "Orchestrator not initialized"}
     return orchestrator._get_live_prices()
+
+@app.post("/api/assistant/feed")
+async def assistant_feed(req: FeedRequest):
+    if not orchestrator or not orchestrator.computer_scanner:
+        return {"error": "Scanner not available"}
+
+    orchestrator.computer_scanner.feed_intelligence(
+        tokens=req.tokens,
+        addresses=req.addresses
+    )
+    return {"status": "ingested", "tokens": len(req.tokens or []), "addresses": len(req.addresses or [])}
