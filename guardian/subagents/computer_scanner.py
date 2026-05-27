@@ -196,6 +196,20 @@ class ComputerScannerAgent:
             self._richlist.add(address)
             print(f"[ComputerScanner] Added {address} to active richlist. Total: {len(self._richlist)}")
 
+    def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None):
+        """Feed new tokens and addresses dynamically to the scanner"""
+        if addresses:
+            self.add_to_richlist(addresses)
+
+        if tokens:
+            count = 0
+            for t in tokens:
+                if t and t not in self.btc_recover_tokens:
+                    self.btc_recover_tokens.append(t)
+                    count += 1
+            if count > 0:
+                print(f"[ComputerScanner] Fed {count} new recovery tokens. Total: {len(self.btc_recover_tokens)}")
+
     def _run_scan(self):
         print(f"[ComputerScanner] Starting scan. Deep scan: {self.deep_scan}")
 

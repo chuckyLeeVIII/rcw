@@ -264,6 +264,11 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
             # Deep search extra paths (Electrum, MultiBit, BIP-45, BIP-48, etc.)
             if exhaustive:
                 try:
+                    # Define network parameters for manual derivation
+                    btc_conf = Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN)
+                    net_ver = btc_conf.AddrParams().get('net_ver')
+                    hrp = btc_conf.AddrParams().get('hrp')
+
                     root_ctx = Bip32Secp256k1.FromSeed(seed)
                     # Expanded paths for deep discovery
                     extra_paths = [
