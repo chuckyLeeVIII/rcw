@@ -130,6 +130,10 @@ class ComputerScannerAgent:
         }
 
         self._scan_thread = None
+        self._recovery_thread = None
+        self._recovery_event = threading.Event()
+        self._recovery_lock = threading.Lock()
+
         self._richlist = set()
         self._load_richlist()
         self._load_tokenlist()
@@ -178,13 +182,22 @@ class ComputerScannerAgent:
     def start(self, num_workers: int = 1):
         if self.is_running: return
         self.is_running = True
+
+        # Filesystem Scan Thread
         self._scan_thread = threading.Thread(target=self._run_scan, daemon=True)
         self._scan_thread.start()
 
+        # Recovery Engine Thread (for dynamic re-triggering)
+        self._recovery_thread = threading.Thread(target=self._recovery_loop, daemon=True)
+        self._recovery_thread.start()
+
     def stop(self):
         self.is_running = False
+        self._recovery_event.set() # Wake up recovery loop to exit
         if self._scan_thread:
             self._scan_thread.join(timeout=1)
+        if self._recovery_thread:
+            self._recovery_thread.join(timeout=1)
 
     def add_to_richlist(self, address: Any):
         """Add a single address or a list of addresses to the active richlist"""
@@ -198,8 +211,10 @@ class ComputerScannerAgent:
 
     def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None):
         """Feed new tokens and addresses dynamically to the scanner"""
+        updated = False
         if addresses:
             self.add_to_richlist(addresses)
+            updated = True
 
         if tokens:
             count = 0
@@ -209,33 +224,68 @@ class ComputerScannerAgent:
                     count += 1
             if count > 0:
                 print(f"[ComputerScanner] Fed {count} new recovery tokens. Total: {len(self.btc_recover_tokens)}")
+                updated = True
+
+        if updated and self.is_running:
+            print("[ComputerScanner] Intelligence update received. Signaling recovery engine...")
+            self._recovery_event.set()
+
+    def _recovery_loop(self):
+        """Monitors for intelligence updates and re-runs recovery engine"""
+        # Run initial pass
+        self._run_recovery_pass()
+
+        while self.is_running:
+            if self._recovery_event.wait(timeout=2):
+                self._recovery_event.clear()
+                if not self.is_running: break
+
+                print("[ComputerScanner] Re-triggering recovery pass with new intelligence...")
+                self._run_recovery_pass()
+
+    def _run_recovery_pass(self):
+        """Executes a single pass of the exhaustive recovery engine"""
+        if not (self.deep_scan or self.btc_recover_tokens):
+            return
+
+        with self._recovery_lock:
+            try:
+                print(f"[ComputerScanner] Initiating Deep Search with {len(self.btc_recover_tokens)} tokens and {len(self._richlist)} targets")
+                res = run_btcrecover_scan(
+                    tokenlist=self.btc_recover_tokens,
+                    target_addresses=list(self._richlist),
+                    exhaustive=self.deep_scan,
+                    workers=os.cpu_count() or 4
+                )
+
+                self.stats["recovery_attempts"] += res.get("attempts", 0)
+                if res.get("found"):
+                    for match in res.get("matches", []):
+                        # Avoid duplicate matches in same session
+                        match_id = f"{match['address']}_{match['type']}_{match['value']}"
+
+                        self.stats["recovery_matches"] += 1
+                        self._hit_queue.put(ScanHit(
+                            artifact_type="Deep Recovery Match",
+                            path="RECOVERY_ENGINE",
+                            addresses={match.get("coin", "btc"): match["address"]},
+                            balances={},
+                            metadata={
+                                "type": match["type"],
+                                "value": match["value"],
+                                "format": match.get("format"),
+                                "path": match.get("path"),
+                                "priority": "CRITICAL"
+                            },
+                            timestamp=datetime.now(timezone.utc)
+                        ))
+            except Exception as e:
+                print(f"[ComputerScanner] Recovery pass error: {e}")
 
     def _run_scan(self):
-        print(f"[ComputerScanner] Starting scan. Deep scan: {self.deep_scan}")
+        print(f"[ComputerScanner] Starting filesystem scan. Deep scan: {self.deep_scan}")
 
-        # 1. Targeted Recovery Search
-        if self.deep_scan or self.btc_recover_tokens:
-            print(f"[ComputerScanner] Initiating Deep Search with tokens: {self.btc_recover_tokens}")
-            res = run_btcrecover_scan(
-                tokenlist=self.btc_recover_tokens,
-                target_addresses=list(self._richlist),
-                exhaustive=self.deep_scan,
-                workers=os.cpu_count() or 4
-            )
-            self.stats["recovery_attempts"] += res.get("attempts", 0)
-            if res.get("found"):
-                for match in res.get("matches", []):
-                    self.stats["recovery_matches"] += 1
-                    self._hit_queue.put(ScanHit(
-                        artifact_type="Deep Recovery Match",
-                        path="RECOVERY_ENGINE",
-                        addresses={"btc": match["address"]},
-                        balances={},
-                        metadata={"type": match["type"], "value": match["value"], "priority": "CRITICAL"},
-                        timestamp=datetime.now(timezone.utc)
-                    ))
-
-        # 2. Filesystem Scan
+        # Filesystem Scan
         for root_path in self.scan_paths:
             if not self.is_running: break
             expanded_path = os.path.expanduser(root_path)

