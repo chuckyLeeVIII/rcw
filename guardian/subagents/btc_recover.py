@@ -114,47 +114,53 @@ def generate_typos(token: str) -> Set[str]:
                 c2[i] = subs[c.lower()]
                 typos.add("".join(c2))
 
-    # 4. Insertions (duplicate characters / padding)
+    # 4. Keyboard Proximity Mutations
+    kb_prox = {
+        'q': 'wa', 'w': 'qeas', 'e': 'wrsd', 'r': 'etdf', 't': 'ryfg', 'y': 'tugh', 'u': 'yijh', 'i': 'uokj', 'o': 'iplk', 'p': 'ol',
+        'a': 'qwsz', 's': 'qwedxzay', 'd': 'werfcsxs', 'f': 'ertgvcd', 'g': 'rtyhbvf', 'h': 'tyujnbg', 'j': 'yuhimnk', 'k': 'uijmolj', 'l': 'opk',
+        'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk'
+    }
+    for i, c in enumerate(chars):
+        if c.lower() in kb_prox:
+            for p_char in kb_prox[c.lower()]:
+                c2 = chars[:]
+                c2[i] = p_char if c.islower() else p_char.upper()
+                typos.add("".join(c2))
+
+    # 5. Insertions (duplicate characters / padding)
     for i in range(len(chars)):
         typos.add("".join(chars[:i] + [chars[i]] + chars[i:]))
         # Nearby insertions
         if i < len(chars) - 1:
             typos.add("".join(chars[:i+1] + [chars[i]] + chars[i+1:]))
 
-    # 5. Reversal
+    # 6. Reversal
     typos.add(token[::-1])
 
-    # 6. Visual mutations (m -> rn, etc)
+    # 7. Visual mutations (m -> rn, etc)
     if 'm' in token: typos.add(token.replace('m', 'rn'))
     if 'rn' in token: typos.add(token.replace('rn', 'm'))
     if 'vv' in token: typos.add(token.replace('vv', 'w'))
     if 'w' in token: typos.add(token.replace('w', 'vv'))
 
-    # 7. Character-level casing (for short tokens)
+    # 8. Character-level casing (for short tokens)
     if len(token) <= 8:
         for i in range(len(chars)):
             c2 = chars[:]
             c2[i] = c2[i].swapcase()
             typos.add("".join(c2))
 
-    # 8. Padding (prefix/suffix)
-    padding = ['!', '1', '0', '_', '.', '*']
+    # 9. Padding (prefix/suffix)
+    padding = ['!', '1', '0', '_', '.', '*', '123', '?', '-', '@']
     for p in padding:
         typos.add(p + token)
         typos.add(token + p)
         typos.add(p + token + p)
 
-    # 7. Per-character casing permutations (only for short strings to avoid explosion)
+    # 10. Per-character casing permutations (only for short strings to avoid explosion)
     if len(token) <= 8:
         for combo in itertools.product(*[(c.lower(), c.upper()) for c in token]):
             typos.add("".join(combo))
-
-    # 8. Common padding variations
-    paddings = ["!", "1", "123", "?", "_", "-", "@", "*"]
-    for p in paddings:
-        typos.add(p + token)
-        typos.add(token + p)
-        typos.add(p + token + p)
 
     return typos
 
@@ -204,12 +210,12 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
             # Multi-coin support for exhaustive mode
             if exhaustive:
                 btc_variants.extend([
-                    (Bip44, Bip44Coins.ETHEREUM),
+                    (Bip44, Bip44Coins.ETHEREUM), (Bip44, Bip44Coins.ETHEREUM_CLASSIC),
                     (Bip44, Bip44Coins.LITECOIN), (Bip49, Bip49Coins.LITECOIN), (Bip84, Bip84Coins.LITECOIN),
                     (Bip44, Bip44Coins.DOGECOIN), (Bip44, Bip44Coins.DASH), (Bip44, Bip44Coins.BITCOIN_CASH)
                 ])
 
-            max_accounts = 5 if exhaustive else 1
+            max_accounts = 10 if exhaustive else 1
             max_indices = 150 if exhaustive else 20
 
             for coin_cls, coin_type in btc_variants:
@@ -307,7 +313,6 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                     pub_key_bytes = derived.PublicKey().RawCompressed().ToBytes()
 
                                     # Native SegWit (P2WPKH)
-                                    # Native SegWit (P2WPKH)
                                     addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes, hrp=hrp)
                                     if addr_p2wpkh in targets:
                                         matches.append({
@@ -353,6 +358,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                 priv_bytes = bytes.fromhex(k)
                 other_coins = [
                     (Bip44Coins.ETHEREUM, "eth"),
+                    (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
                     (Bip44Coins.LITECOIN, "ltc"),
                     (Bip44Coins.DOGECOIN, "doge"),
                     (Bip44Coins.DASH, "dash"),
@@ -379,6 +385,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                 priv_bytes = bytes.fromhex(res_wif['private_key_hex'])
                 other_coins = [
                     (Bip44Coins.ETHEREUM, "eth"),
+                    (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
                     (Bip44Coins.LITECOIN, "ltc"),
                     (Bip44Coins.DOGECOIN, "doge"),
                     (Bip44Coins.DASH, "dash"),
