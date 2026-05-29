@@ -181,10 +181,10 @@ def generate_typos(token: str) -> Set[str]:
         if i < len(chars) - 1:
             typos.add("".join(chars[:i+1] + [chars[i]] + chars[i+1:]))
 
-    # 5. Reversal
+    # 6. Reversal
     typos.add(token[::-1])
 
-    # 6. Visual mutations (m -> rn, etc)
+    # 7. Visual mutations (m -> rn, etc)
     if 'm' in token: typos.add(token.replace('m', 'rn'))
     if 'rn' in token: typos.add(token.replace('rn', 'm'))
     if 'vv' in token: typos.add(token.replace('vv', 'w'))
@@ -257,12 +257,12 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
             # Multi-coin support for exhaustive mode
             if exhaustive:
                 btc_variants.extend([
-                    (Bip44, Bip44Coins.ETHEREUM),
+                    (Bip44, Bip44Coins.ETHEREUM), (Bip44, Bip44Coins.ETHEREUM_CLASSIC),
                     (Bip44, Bip44Coins.LITECOIN), (Bip49, Bip49Coins.LITECOIN), (Bip84, Bip84Coins.LITECOIN),
                     (Bip44, Bip44Coins.DOGECOIN), (Bip44, Bip44Coins.DASH), (Bip44, Bip44Coins.BITCOIN_CASH)
                 ])
 
-            max_accounts = 5 if exhaustive else 1
+            max_accounts = 10 if exhaustive else 1
             max_indices = 150 if exhaustive else 20
 
             for coin_cls, coin_type in btc_variants:
@@ -424,6 +424,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                 priv_bytes = bytes.fromhex(k)
                 other_coins = [
                     (Bip44Coins.ETHEREUM, "eth"),
+                    (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
                     (Bip44Coins.LITECOIN, "ltc"),
                     (Bip44Coins.DOGECOIN, "doge"),
                     (Bip44Coins.DASH, "dash"),
@@ -450,6 +451,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                 priv_bytes = bytes.fromhex(res_wif['private_key_hex'])
                 other_coins = [
                     (Bip44Coins.ETHEREUM, "eth"),
+                    (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
                     (Bip44Coins.LITECOIN, "ltc"),
                     (Bip44Coins.DOGECOIN, "doge"),
                     (Bip44Coins.DASH, "dash"),
