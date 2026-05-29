@@ -210,77 +210,23 @@ class ComputerScannerAgent:
             print(f"[ComputerScanner] Added {address} to active richlist. Total: {len(self._richlist)}")
 
     def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None):
-        """Feed new tokens and addresses dynamically to the scanner"""
-        updated = False
+        """Dynamic intelligence feeding from AI Assistant"""
         if addresses:
             self.add_to_richlist(addresses)
-            updated = True
 
         if tokens:
-            count = 0
+            added_count = 0
             for t in tokens:
                 if t and t not in self.btc_recover_tokens:
                     self.btc_recover_tokens.append(t)
-                    count += 1
-            if count > 0:
-                print(f"[ComputerScanner] Fed {count} new recovery tokens. Total: {len(self.btc_recover_tokens)}")
-                updated = True
+                    added_count += 1
+            print(f"[ComputerScanner] Ingested {added_count} new recovery tokens from assistant")
 
-        if updated and self.is_running:
-            print("[ComputerScanner] Intelligence update received. Signaling recovery engine...")
-            self._recovery_event.set()
-
-    def _recovery_loop(self):
-        """Monitors for intelligence updates and re-runs recovery engine"""
-        # Run initial pass
-        self._run_recovery_pass()
-
-        while self.is_running:
-            if self._recovery_event.wait(timeout=2):
-                self._recovery_event.clear()
-                if not self.is_running: break
-
-                print("[ComputerScanner] Re-triggering recovery pass with new intelligence...")
-                self._run_recovery_pass()
-
-    def _run_recovery_pass(self):
-        """Executes a single pass of the exhaustive recovery engine"""
-        if not (self.deep_scan or self.btc_recover_tokens):
-            return
-
-        with self._recovery_lock:
-            try:
-                print(f"[ComputerScanner] Initiating Deep Search with {len(self.btc_recover_tokens)} tokens and {len(self._richlist)} targets")
-                res = run_btcrecover_scan(
-                    tokenlist=self.btc_recover_tokens,
-                    target_addresses=list(self._richlist),
-                    exhaustive=self.deep_scan,
-                    workers=os.cpu_count() or 4
-                )
-
-                self.stats["recovery_attempts"] += res.get("attempts", 0)
-                if res.get("found"):
-                    for match in res.get("matches", []):
-                        # Avoid duplicate matches in same session
-                        match_id = f"{match['address']}_{match['type']}_{match['value']}"
-
-                        self.stats["recovery_matches"] += 1
-                        self._hit_queue.put(ScanHit(
-                            artifact_type="Deep Recovery Match",
-                            path="RECOVERY_ENGINE",
-                            addresses={match.get("coin", "btc"): match["address"]},
-                            balances={},
-                            metadata={
-                                "type": match["type"],
-                                "value": match["value"],
-                                "format": match.get("format"),
-                                "path": match.get("path"),
-                                "priority": "CRITICAL"
-                            },
-                            timestamp=datetime.now(timezone.utc)
-                        ))
-            except Exception as e:
-                print(f"[ComputerScanner] Recovery pass error: {e}")
+        # If a scan is already running, we might want to re-trigger a targeted recovery scan
+        # with the new intelligence if the current scan hasn't finished yet.
+        # For now, we update the state so the next scan (or current if it reaches that part) uses it.
+        if self.is_running and (tokens or addresses):
+            print("[ComputerScanner] Intelligence update received during active scan")
 
     def _run_scan(self):
         print(f"[ComputerScanner] Starting filesystem scan. Deep scan: {self.deep_scan}")

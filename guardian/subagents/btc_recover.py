@@ -356,35 +356,40 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                         "m/0'/0/{}",
                     ]
 
-                    for coin_type, coin_name in extra_coins:
-                        conf = Bip44ConfGetter.GetConfig(coin_type)
-                        net_ver = conf.AddrParams().get('net_ver')
-                        hrp = conf.AddrParams().get('hrp')
+                    # Ensure Bitcoin parameters are available for extra paths (outside loop)
+                    # Pre-calculate these to avoid redundant lookups in the inner loop
+                    btc_conf = Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN)
+                    net_ver = btc_conf.AddrParams().get('net_ver')
+                    hrp = Bip84ConfGetter.GetConfig(Bip84Coins.BITCOIN).AddrParams().get('hrp')
 
-                        for path_template in extra_paths:
-                            for i in range(max_indices):
+                    for path_template in extra_paths:
+                        for i in range(max_indices):
+                            try:
+                                path = path_template.format(i)
+                                derived = root_ctx.DerivePath(path)
+
+                                # Check P2PKH (Legacy)
+                                addr_p2pkh = P2PKHAddr.EncodeKey(derived.PublicKey().RawCompressed().ToBytes(),
+                                                          net_ver=net_ver)
+                                if addr_p2pkh in targets:
+                                    matches.append({
+                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2pkh,
+                                        "path": path, "script": "P2PKH", "passphrase": passphrase
+                                    })
+
+                                # For BIP-49/84 like paths, we also check SegWit addresses even on non-standard paths
                                 try:
                                     path = path_template.format(i)
                                     derived = root_ctx.DerivePath(path)
                                     pub_key_bytes = derived.PublicKey().RawCompressed().ToBytes()
 
-                                    # 1. Check P2PKH (Legacy)
-                                    if net_ver is not None:
-                                        addr_p2pkh = P2PKHAddr.EncodeKey(pub_key_bytes, net_ver=net_ver)
-                                        if addr_p2pkh in targets:
-                                            matches.append({
-                                                "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2pkh,
-                                                "path": path, "script": "P2PKH", "coin": coin_name, "passphrase": passphrase
-                                            })
-
-                                    # 2. Check Native SegWit (P2WPKH)
-                                    if hrp is not None:
-                                        addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes, hrp=hrp)
-                                        if addr_p2wpkh in targets:
-                                            matches.append({
-                                                "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh,
-                                                "path": path, "script": "P2WPKH", "coin": coin_name, "passphrase": passphrase
-                                            })
+                                    # Native SegWit (P2WPKH)
+                                    addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes, hrp=hrp)
+                                    if addr_p2wpkh in targets:
+                                        matches.append({
+                                            "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh,
+                                            "path": path, "script": "P2WPKH", "passphrase": passphrase
+                                        })
 
                                     # 3. Check Nested SegWit (P2SH-P2WPKH)
                                     try:
