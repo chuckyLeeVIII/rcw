@@ -504,7 +504,7 @@ def run_btcrecover_scan(
 
             # Optionally add some typos for the best permutations if count is low
             if len(candidates) < 500:
-                for p in list(perms)[:50]:
+                for p in sorted(perms)[:50]:
                     if " " not in p: # only typo-mutate single-word perms
                         candidates.update(generate_typos(p))
         else:
