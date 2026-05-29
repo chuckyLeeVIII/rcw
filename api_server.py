@@ -72,6 +72,25 @@ async def stop_scan():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.post("/api/assistant/feed")
+async def feed_assistant_intelligence(req: FeedRequest):
+    if not orchestrator:
+        return {"error": "Orchestrator not available"}
+
+    # 1. Feed text to KeyReducer for normalization and balance checking
+    if req.tokens:
+        for token in req.tokens:
+            orchestrator.feed_text(token, source="assistant_feed")
+
+    # 2. Feed intelligence to ComputerScanner for future recovery passes
+    if orchestrator.computer_scanner:
+        orchestrator.computer_scanner.feed_intelligence(
+            tokens=req.tokens,
+            addresses=req.addresses
+        )
+
+    return {"status": "intelligence_ingested", "tokens": len(req.tokens or []), "addresses": len(req.addresses or [])}
+
 @app.post("/api/screenwatcher/snapshot")
 async def screenwatcher_snapshot():
     if not orchestrator or not orchestrator.screen_watcher:
