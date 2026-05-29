@@ -132,7 +132,7 @@ export function RecoveryAIAssistant() {
       const words = input.toLowerCase().split(/\s+/);
       const stopWords = new Set(['the', 'this', 'that', 'with', 'from', 'lost', 'seed', 'help', 'have', 'find', 'like', 'words']);
       const tokens = words.filter(w => w.length >= 4 && !stopWords.has(w));
-      const addressRegex = /(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})/g;
+      const addressRegex = /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})\b/g;
       const addresses = input.match(addressRegex) || [];
 
       if (tokens.length > 0 || addresses.length > 0) {
