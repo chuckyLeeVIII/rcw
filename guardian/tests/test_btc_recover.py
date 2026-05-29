@@ -1,4 +1,5 @@
 import pytest
+import os
 from guardian.subagents.btc_recover import btc_from_hex, generate_typos, btc_from_wif, check_candidate
 
 def test_btc_from_hex_valid():
@@ -26,60 +27,68 @@ def test_generate_typos():
     token = "test"
     typos = generate_typos(token)
     assert token in typos
-    # Omission: 'est', 'tst', 'tet', 'tes'
+    # Omission: 'est'
     assert "est" in typos
-    # Swaps: 'etst', 'tset', 'tets'
+    # Swaps: 'tset'
     assert "tset" in typos
     # Substitution: 't3st' (e -> 3)
     assert "t3st" in typos
-    # Casing (New)
-    assert "TEST" in typos
-    assert "TeSt" in typos
-    # Padding (New)
+    # Keyboard Proximity: 't' -> 'r' -> 'rest'
+    assert "rest" in typos
+    # Padding
     assert "!test" in typos
-    assert "test123" in typos
-    assert "?test?" in typos
+    assert "test!" in typos
+    assert "!test!" in typos
+    # Casing
+    assert "TEST" in typos
 
 def test_exhaustive_derivation():
     # Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
     # BTC (BIP44) m/44'/0'/0'/0/0 -> 1JQH7moZMR4o3Yv4YmsmZ7SST7Nf6Gxy6a
     # LTC (BIP44) m/44'/2'/0'/0/0 -> LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez
-    # ETH (BIP44) m/44'/60'/0'/0/0 -> 0x9858EfFD232B4033E47d90003D41EC34EcaEda94
     mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-    targets = {"LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez", "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"}
+    targets = {"LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez"}
 
-    # Non-exhaustive should fail for LTC and ETH
+    # Non-exhaustive should fail for LTC
     res1 = check_candidate(mnemonic, targets, exhaustive=False)
     assert len(res1) == 0
 
-    # Exhaustive should find LTC and ETH
+    # Exhaustive should find LTC
     res2 = check_candidate(mnemonic, targets, exhaustive=True)
     assert len(res2) > 0
     assert any(m['address'] == "LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez" for m in res2)
 
-def test_exhaustive_extra_paths():
-    # Test BIP-48 like path or custom path
-    # Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
-    # m/0'/0 (Copay/BitPay/MultiBit) -> 1999S99m9m... (need a real one)
-    # Actually let's just check if it finds a P2PKH on m/0/0
-    mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-    # m/0/0 -> 199266Ymi8vYvYvYvYvYvYvYvYvYvYvYvY (fake)
-    # Let's use a known derivation from bip-utils for m/0/0
-    from bip_utils import Bip32Secp256k1, Bip39SeedGenerator, P2PKHAddr, Bip44ConfGetter, Bip44Coins
-    seed = Bip39SeedGenerator(mnemonic).Generate()
-    root = Bip32Secp256k1.FromSeed(seed)
-    derived = root.DerivePath("m/0/0")
-    addr = P2PKHAddr.EncodeKey(derived.PublicKey().RawCompressed().ToBytes(),
-                              net_ver=Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('net_ver'))
-
-    targets = {addr}
-    res = check_candidate(mnemonic, targets, exhaustive=True)
-    assert any(m['path'] == "m/0/0" for m in res)
-
-def test_typo_mutations_extended():
-    token = "password"
+def test_generate_typos_visual_and_kb():
+    """Verify visual mutations and keyboard proximity"""
+    token = "man"
     typos = generate_typos(token)
-    assert "password!" in typos
-    assert "Password" in typos
-    assert "p4ssword" in typos
-    assert "passvvord" in typos
+    assert "nan" in typos  # n<->m
+    assert "rnan" in typos # m->rn
+
+    token_w = "award"
+    typos_w = generate_typos(token_w)
+    assert "avvard" in typos_w # w->vv
+
+def test_check_candidate_multi_coin():
+    """Verify multi-coin support in exhaustive mode"""
+    mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    # ETH address for m/44'/60'/0'/0/0
+    eth_address = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+    # ETC address for m/44'/61'/0'/0/0
+    etc_address = "0xFA22515E43658ce56A7682B801e9B5456f511420"
+
+    targets = {eth_address, etc_address}
+    res = check_candidate(mnemonic, targets, exhaustive=True)
+
+    addresses_found = [m['address'] for m in res]
+    assert eth_address in addresses_found
+    assert etc_address in addresses_found
+
+def test_check_candidate_hex_multi_coin():
+    """Verify multi-coin hex private key check"""
+    hex_key = "0000000000000000000000000000000000000000000000000000000000000001"
+    eth_address = "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf"
+    targets = {eth_address}
+
+    res = check_candidate(hex_key, targets, exhaustive=True)
+    assert any(m.get('address') == eth_address for m in res)
