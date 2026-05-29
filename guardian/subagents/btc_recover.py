@@ -287,7 +287,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                     # Pre-calculate these to avoid redundant lookups in the inner loop
                     btc_conf = Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN)
                     net_ver = btc_conf.AddrParams().get('net_ver')
-                    hrp = btc_conf.AddrParams().get('hrp')
+                    hrp = Bip84ConfGetter.GetConfig(Bip84Coins.BITCOIN).AddrParams().get('hrp')
 
                     for path_template in extra_paths:
                         for i in range(max_indices):
