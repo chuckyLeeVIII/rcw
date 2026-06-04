@@ -1,5 +1,6 @@
 import hashlib
 import itertools
+import os
 from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, Optional, List, Set
 from bip_utils import (
@@ -90,7 +91,6 @@ def generate_typos(token: str) -> Set[str]:
         words = token.split()
         if len(words) <= 24:
             # 1. Phonetic/Common Word Substitutions
-            # In a real exhaustive search, we'd use a dictionary or visual similarity
             subs_map = {'aboot': 'about', 'abandonn': 'abandon', 'seeeed': 'seed'}
             for i, w in enumerate(words):
                 if w.lower() in subs_map:
@@ -98,11 +98,9 @@ def generate_typos(token: str) -> Set[str]:
                     w2[i] = subs_map[w.lower()]
                     typos.add(" ".join(w2))
 
-            # 2. Try single-word character typos for each word if sentence is not too long
+            # 2. Try single-word character typos for each word
             if len(words) <= 12:
-                # To avoid massive explosion, we only typo-mutate ONE word at a time in the sentence
                 for i, w in enumerate(words):
-                    # We need a non-recursive way to get simple character typos
                     # Omissions
                     for j in range(len(w)):
                         w2 = words[:]
@@ -115,21 +113,11 @@ def generate_typos(token: str) -> Set[str]:
                         chars_w[j], chars_w[j+1] = chars_w[j+1], chars_w[j]
                         w2[i] = "".join(chars_w)
                         typos.add(" ".join(w2))
-                    # Common substitutions
-                    keyboard_adj = {'o': '0p', 'i': '1u', 'a': 'sq', 's': 'ad'}
-                    for j, c in enumerate(w):
-                        if c.lower() in keyboard_adj:
-                            for adj in keyboard_adj[c.lower()]:
-                                w2 = words[:]
-                                chars_w = list(w)
-                                chars_w[j] = adj
-                                w2[i] = "".join(chars_w)
-                                typos.add(" ".join(w2))
         return typos
 
     chars = list(token)
 
-    # 1. Omissions (Single character deletion)
+    # 1. Omissions
     for i in range(len(chars)):
         typos.add("".join(chars[:i] + chars[i+1:]))
 
@@ -143,13 +131,12 @@ def generate_typos(token: str) -> Set[str]:
             c3[i], c3[i+2] = c3[i+2], c3[i]
             typos.add("".join(c3))
 
-    # 3. Common Substitutions & Keyboard Proximity & Phonetic
+    # 3. Common Substitutions
     subs_list = [
         {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
          'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
          'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
-        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n',
-         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y'}
+        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n'}
     ]
 
     keyboard_adj = {
@@ -160,49 +147,42 @@ def generate_typos(token: str) -> Set[str]:
 
     for i, c in enumerate(chars):
         cl = c.lower()
-        # Subs
         for subs in subs_list:
             if cl in subs:
                 c2 = chars[:]
                 c2[i] = subs[cl]
                 typos.add("".join(c2))
-        # Keyboard adjacent
+
         if cl in keyboard_adj:
             for adj in keyboard_adj[cl]:
                 c2 = chars[:]
                 c2[i] = adj
                 typos.add("".join(c2))
 
-    # 4. Insertions (duplicate characters & padding)
+    # 4. Insertions
     for i in range(len(chars)):
-        # Double character
         typos.add("".join(chars[:i] + [chars[i]] + chars[i:]))
-        # Nearby insertions
-        if i < len(chars) - 1:
-            typos.add("".join(chars[:i+1] + [chars[i]] + chars[i+1:]))
 
-    # 6. Reversal
-    typos.add(token[::-1])
-
-    # 7. Visual mutations (m -> rn, etc)
+    # 5. Visual mutations
     if 'm' in token: typos.add(token.replace('m', 'rn'))
     if 'rn' in token: typos.add(token.replace('rn', 'm'))
     if 'vv' in token: typos.add(token.replace('vv', 'w'))
     if 'w' in token: typos.add(token.replace('w', 'vv'))
 
-    # 7. Character-level casing (for short tokens)
+    # 6. Reversal
+    typos.add(token[::-1])
+
+    # 7. Casing
     if len(token) <= 10:
+        typos.add(token.lower())
+        typos.add(token.upper())
+        typos.add(token.capitalize())
         for i in range(len(chars)):
             c2 = chars[:]
             c2[i] = c2[i].swapcase()
             typos.add("".join(c2))
 
-    # 8. Per-character casing permutations (only for very short strings to avoid explosion)
-    if len(token) <= 6:
-        for combo in itertools.product(*[(c.lower(), c.upper()) for c in token]):
-            typos.add("".join(combo))
-
-    # 9. Exhaustive padding variations
+    # 8. Padding
     paddings = ["!", "1", "123", "0", "_", "-", "@", "*", "$", ".", " "]
     for p in paddings:
         typos.add(p + token)
@@ -216,13 +196,6 @@ def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
     perms = set()
     base_tokens = []
     for t in tokens:
-        # Word-level mutations if it's a potential mnemonic fragment
-        if " " in t:
-            words = t.split()
-            if len(words) <= 4:
-                for combo in itertools.permutations(words):
-                    perms.add(" ".join(combo))
-
         base_tokens.extend([t, t.lower(), t.upper(), t.capitalize()])
 
     base_tokens = list(set(base_tokens))
@@ -248,13 +221,12 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
         try:
             seed = Bip39SeedGenerator(norm_pwd).Generate(passphrase)
 
-            # Standard BIP paths for BTC
+            # Standard BIP paths
             btc_variants = [
-        (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN),
-        (Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN)
+                (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN),
+                (Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN)
             ]
 
-            # Multi-coin support for exhaustive mode
             if exhaustive:
                 btc_variants.extend([
                     (Bip44, Bip44Coins.ETHEREUM), (Bip44, Bip44Coins.ETHEREUM_CLASSIC),
@@ -267,7 +239,6 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
             for coin_cls, coin_type in btc_variants:
                 try:
-                    # Pre-calculate network parameters for speed
                     conf = Bip44ConfGetter.GetConfig(coin_type)
                     net_ver = conf.AddrParams().get('net_ver')
                     hrp = conf.AddrParams().get('hrp')
@@ -279,141 +250,71 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                 try:
                                     node = acc_ctx.Change(chain).AddressIndex(i)
                                     pub_key = node.PublicKey()
-                                    pub_bytes = pub_key.RawCompressed().ToBytes()
-
-                                    check_addresses = []
-                                    # Standard address for the specific BIP context
-                                    check_addresses.append((pub_key.ToAddress(), "standard"))
-
-                                    if exhaustive:
-                                        # 1. Legacy (P2PKH)
-                                        if net_ver is not None:
-                                            try:
-                                                p2pkh = P2PKHAddr.EncodeKey(pub_bytes, net_ver=net_ver)
-                                                check_addresses.append((p2pkh, "p2pkh"))
-                                            except: pass
-
-                                        # 2. Native SegWit (P2WPKH)
-                                        if hrp is not None:
-                                            try:
-                                                p2wpkh = P2WPKHAddr.EncodeKey(pub_bytes, hrp=hrp)
-                                                check_addresses.append((p2wpkh, "p2wpkh"))
-                                            except: pass
-
-                                        # 3. Nested SegWit (P2SH-P2WPKH)
-                                        # Only for UTXO coins that support it
-                                        if coin_type in (Bip44Coins.BITCOIN, Bip44Coins.LITECOIN, Bip44Coins.BITCOIN_CASH, Bip44Coins.DASH):
-                                            try:
-                                                p2sh_p2wpkh = Bip49.FromPublicKey(pub_bytes, coin_type).PublicKey().ToAddress()
-                                                check_addresses.append((p2sh_p2wpkh, "p2sh-p2wpkh"))
-                                            except: pass
-
-                                        # 4. Taproot (P2TR)
-                                        if coin_type == Bip44Coins.BITCOIN:
-                                            try:
-                                                p2tr = Bip86.FromPublicKey(pub_bytes, Bip86Coins.BITCOIN).PublicKey().ToAddress()
-                                                check_addresses.append((p2tr, "p2tr"))
-                                            except: pass
-
-                                    for addr, fmt in check_addresses:
-                                        if addr in targets:
-                                            matches.append({
-                                                "type": "mnemonic", "value": norm_pwd, "address": addr,
-                                                "format": fmt,
-                                                "coin": coin_type.name, "path_index": i, "account": acc_idx,
-                                                "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
-                                                "passphrase": passphrase
-                                            })
+                                    addr = pub_key.ToAddress()
+                                    if addr in targets:
+                                        matches.append({
+                                            "type": "mnemonic", "value": norm_pwd, "address": addr,
+                                            "coin": coin_type.name, "path_index": i, "account": acc_idx,
+                                            "passphrase": passphrase
+                                        })
                                 except Exception: pass
                 except Exception: pass
 
-            # Deep search extra paths (Electrum, MultiBit, BIP-45, BIP-48, etc.)
+            # Deep search extra paths
             if exhaustive:
                 try:
-                    # In exhaustive mode, we check extra paths for major coins
                     extra_coins = [
                         (Bip44Coins.BITCOIN, "btc"),
                         (Bip44Coins.LITECOIN, "ltc"),
                         (Bip44Coins.DOGECOIN, "doge"),
                     ]
-
                     root_ctx = Bip32Secp256k1.FromSeed(seed)
-                    # Expanded paths for deep discovery
                     extra_paths = [
-                        # m/0/n (Electrum Standard)
-                        "m/0/{}", "m/0/0/{}",
-                        # m/0'/0/n (BIP-32 Legacy)
-                        "m/0'/0/{}", "m/0'/0/0/{}",
-                        # BIP-44 Fork/Legacy variants
+                        "m/0/{}", "m/0/0/{}", "m/0'/0/{}", "m/0'/0/0/{}",
                         "m/44'/0'/0'/0/{}", "m/44'/0'/0'/{}", "m/44'/0'/1'/0/{}",
-                        # BIP-45 (Multisig)
                         "m/45'/0/{}", "m/45'/0/0/{}",
-                        # BIP-48 (Multisig) - m/48'/coin'/account'/script'/change/index
                         "m/48'/0'/0'/1'/0/{}", "m/48'/0'/0'/2'/0/{}",
-                        # Blockchain.info Legacy
-                        "m/0'/{}",
-                        # Copay / BitPay
-                        "m/0'/0/{}",
+                        "m/0'/{}", "m/0'/0/{}"
                     ]
 
-                    # Ensure Bitcoin parameters are available for extra paths (outside loop)
-                    # Pre-calculate these to avoid redundant lookups in the inner loop
-                    btc_conf = Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN)
-                    net_ver = btc_conf.AddrParams().get('net_ver')
-                    hrp = Bip84ConfGetter.GetConfig(Bip84Coins.BITCOIN).AddrParams().get('hrp')
-
-                    for path_template in extra_paths:
-                        for i in range(max_indices):
+                    for coin_type, coin_name in extra_coins:
+                        try:
+                            conf = Bip44ConfGetter.GetConfig(coin_type)
+                            net_ver = conf.AddrParams().get('net_ver')
                             try:
-                                path = path_template.format(i)
-                                derived = root_ctx.DerivePath(path)
+                                hrp = Bip84ConfGetter.GetConfig(coin_type).AddrParams().get('hrp')
+                            except:
+                                hrp = conf.AddrParams().get('hrp')
 
-                                # Check P2PKH (Legacy)
-                                addr_p2pkh = P2PKHAddr.EncodeKey(derived.PublicKey().RawCompressed().ToBytes(),
-                                                          net_ver=net_ver)
-                                if addr_p2pkh in targets:
-                                    matches.append({
-                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2pkh,
-                                        "path": path, "script": "P2PKH", "passphrase": passphrase
-                                    })
-
-                                # For BIP-49/84 like paths, we also check SegWit addresses even on non-standard paths
-                                try:
-                                    path = path_template.format(i)
-                                    derived = root_ctx.DerivePath(path)
-                                    pub_key_bytes = derived.PublicKey().RawCompressed().ToBytes()
-
-                                    # Native SegWit (P2WPKH)
-                                    addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes, hrp=hrp)
-                                    if addr_p2wpkh in targets:
-                                        matches.append({
-                                            "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh,
-                                            "path": path, "script": "P2WPKH", "passphrase": passphrase
-                                        })
-
-                                    # 3. Check Nested SegWit (P2SH-P2WPKH)
+                            for path_template in extra_paths:
+                                for i in range(max_indices):
                                     try:
-                                        # Use Bip49 to easily get P2SH-P2WPKH from the public key
-                                        # (Bip49.FromPublicKey works for any coin with compatible P2SH-P2WPKH)
-                                        bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, coin_type)
-                                        addr_p2sh = bip49_ctx.PublicKey().ToAddress()
-                                        if addr_p2sh in targets:
-                                            matches.append({
-                                                "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2sh,
-                                                "path": path, "script": "P2SH-P2WPKH", "coin": coin_name, "passphrase": passphrase
-                                            })
-                                    except: pass
+                                        path = path_template.format(i)
+                                        derived = root_ctx.DerivePath(path)
+                                        pub_bytes = derived.PublicKey().RawCompressed().ToBytes()
 
-                                except (Bip32KeyError, Exception): pass
+                                        # P2PKH
+                                        if net_ver is not None:
+                                            addr = P2PKHAddr.EncodeKey(pub_bytes, net_ver=net_ver)
+                                            if addr in targets:
+                                                matches.append({"type": "mnemonic_extra", "value": norm_pwd, "address": addr, "path": path, "coin": coin_name, "script": "P2PKH"})
+
+                                        # P2WPKH
+                                        if hrp is not None:
+                                            try:
+                                                addr = P2WPKHAddr.EncodeKey(pub_bytes, hrp=hrp)
+                                                if addr in targets:
+                                                    matches.append({"type": "mnemonic_extra", "value": norm_pwd, "address": addr, "path": path, "coin": coin_name, "script": "P2WPKH"})
+                                            except: pass
+                                    except: pass
+                        except: pass
                 except Exception: pass
         except Exception: pass
 
-    # 2. As raw hex key (Brainwallet or Raw)
+    # 2. As raw hex key
     potential_keys = []
     if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
         potential_keys.append(pwd)
-
-    # Brainwallet SHA256
     potential_keys.append(hashlib.sha256(pwd.encode()).hexdigest())
 
     for k in potential_keys:
@@ -424,16 +325,12 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                     matches.append({"type": "private_key", "value": pwd, "address": addr, "hex": k})
 
         if exhaustive:
-            # Multi-coin hex check
             try:
                 priv_bytes = bytes.fromhex(k)
                 other_coins = [
-                    (Bip44Coins.ETHEREUM, "eth"),
-                    (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
-                    (Bip44Coins.LITECOIN, "ltc"),
-                    (Bip44Coins.DOGECOIN, "doge"),
-                    (Bip44Coins.DASH, "dash"),
-                    (Bip44Coins.BITCOIN_CASH, "bch")
+                    (Bip44Coins.ETHEREUM, "eth"), (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
+                    (Bip44Coins.LITECOIN, "ltc"), (Bip44Coins.DOGECOIN, "doge"),
+                    (Bip44Coins.DASH, "dash"), (Bip44Coins.BITCOIN_CASH, "bch")
                 ]
                 for coin_type, coin_name in other_coins:
                     try:
@@ -451,16 +348,12 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                 matches.append({"type": "wif", "value": pwd, "address": addr})
 
         if exhaustive and 'private_key_hex' in res_wif:
-            # Multi-coin WIF check
             try:
                 priv_bytes = bytes.fromhex(res_wif['private_key_hex'])
                 other_coins = [
-                    (Bip44Coins.ETHEREUM, "eth"),
-                    (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
-                    (Bip44Coins.LITECOIN, "ltc"),
-                    (Bip44Coins.DOGECOIN, "doge"),
-                    (Bip44Coins.DASH, "dash"),
-                    (Bip44Coins.BITCOIN_CASH, "bch")
+                    (Bip44Coins.ETHEREUM, "eth"), (Bip44Coins.ETHEREUM_CLASSIC, "etc"),
+                    (Bip44Coins.LITECOIN, "ltc"), (Bip44Coins.DOGECOIN, "doge"),
+                    (Bip44Coins.DASH, "dash"), (Bip44Coins.BITCOIN_CASH, "bch")
                 ]
                 for coin_type, coin_name in other_coins:
                     try:
@@ -480,78 +373,48 @@ def run_btcrecover_scan(
     exhaustive: bool = False,
     workers: int = 4
 ) -> Dict:
-    """
-    Exhaustive BTC recovery logic.
-    """
+    """Exhaustive BTC recovery logic."""
     results = {"found": False, "attempts": 0, "matches": []}
     targets = set(target_addresses or [])
-
-    if not targets:
-        return results
+    if not targets: return results
 
     candidates = set(passwords or [])
-
     if tokenlist:
         if exhaustive:
-            # Deep search with typos and permutations
-            # To avoid explosion, we typo-mutate individual tokens AND original tokens,
-            # then permute the original tokens.
             base_typos = set()
             for token in tokenlist:
                 if len(token.split()) > 3:
                     base_typos.add(token)
                 else:
                     base_typos.update(generate_typos(token))
-
             candidates.update(base_typos)
-
-            # Permute original tokens (limit to max_len=3 to avoid explosion)
-            perms = generate_permutations(tokenlist, max_len=min(3, len(tokenlist)))
-            candidates.update(perms)
-
-            # Optionally add some typos for the best permutations if count is low
-            if len(candidates) < 500:
-                for p in sorted(perms)[:50]:
-                    if " " not in p: # only typo-mutate single-word perms
-                        candidates.update(generate_typos(p))
+            candidates.update(generate_permutations(tokenlist, max_len=min(3, len(tokenlist))))
         else:
-            # Simple permutations
             candidates.update(tokenlist)
             candidates.update(generate_permutations(tokenlist, max_len=2))
 
     results["attempts"] = len(candidates)
 
-    # Process candidates in parallel for "bulletproof" speed
     if exhaustive and len(candidates) > 5:
-        # For exhaustive, we also try cross-pollinating tokens as passphrases for mnemonics
         passphrases = [""]
-        if exhaustive:
-            # Add top 5 candidates as potential passphrases to avoid explosion but catch common ones
-            passphrases.extend(list(candidates)[:5])
-
         with ProcessPoolExecutor(max_workers=workers) as executor:
             all_futures = []
             for pwd in candidates:
                 for pp in passphrases:
-                    # Skip if password is same as passphrase (unless empty)
-                    if pp and pwd == pp: continue
                     all_futures.append(executor.submit(check_candidate, pwd, targets, exhaustive, pp))
-
             for future in all_futures:
                 try:
                     found_matches = future.result()
                     if found_matches:
                         results["found"] = True
                         results["matches"].extend(found_matches)
-                except Exception as e:
-                    print(f"DEBUG: worker error: {e}")
+                except Exception: pass
     else:
         for pwd in candidates:
             found_matches = check_candidate(pwd, targets, exhaustive)
             if found_matches:
                 results["found"] = True
                 results["matches"].extend(found_matches)
-            if results["found"] and not exhaustive:
-                break
+            if results["found"] and not exhaustive: break
 
     return results

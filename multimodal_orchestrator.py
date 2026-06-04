@@ -325,6 +325,7 @@ class MultimodalOrchestrator:
             btc_recover_tokens=cs_config.get('btc_recover_tokens'),
             btc_recover_max_tokens=cs_config.get('btc_recover_max_tokens', 4),
             skip_balance_check=skip_balance_check,
+            deep_scan=cs_config.get('deep_scan', False),
         )
     
     def start(self):
