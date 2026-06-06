@@ -56,7 +56,9 @@ async def start_scan(req: ScanRequest):
             addrs = [a.strip() for a in req.richlist.split(',') if a.strip()]
             valid_addrs = [a for a in addrs if len(a) >= 26]
             if valid_addrs:
-                orchestrator.computer_scanner.add_to_richlist(valid_addrs)
+                # If only one, pass as string for backward compatibility, else list
+                to_add = valid_addrs[0] if len(valid_addrs) == 1 else valid_addrs
+                orchestrator.computer_scanner.add_to_richlist(to_add)
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}

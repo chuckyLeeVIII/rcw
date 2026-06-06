@@ -82,7 +82,10 @@ def btc_from_wif(wif: str) -> Optional[Dict[str, str]]:
         return None
 
 def generate_typos(token: str) -> Set[str]:
-    """Generate character-level mutations for a token"""
+    """
+    [DeepTools Engine]
+    Generate character-level mutations for a token
+    """
     typos = {token}
     chars = list(token)
 
@@ -137,11 +140,17 @@ def generate_typos(token: str) -> Set[str]:
     # 6. Reversal
     typos.add(token[::-1])
 
-    # 7. Visual mutations (m -> rn, etc)
+    # 7. Visual mutations (m -> rn, cl -> d, etc)
     if 'm' in token: typos.add(token.replace('m', 'rn'))
     if 'rn' in token: typos.add(token.replace('rn', 'm'))
     if 'vv' in token: typos.add(token.replace('vv', 'w'))
     if 'w' in token: typos.add(token.replace('w', 'vv'))
+    if 'cl' in token: typos.add(token.replace('cl', 'd'))
+    if 'd' in token: typos.add(token.replace('d', 'cl'))
+    if 'o' in token: typos.add(token.replace('o', '0'))
+    if '0' in token: typos.add(token.replace('0', 'o'))
+    if 'l' in token: typos.add(token.replace('l', '1'))
+    if '1' in token: typos.add(token.replace('1', 'l'))
 
     # 8. Character-level casing (for short tokens)
     if len(token) <= 8:
@@ -186,7 +195,10 @@ def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
     return perms
 
 def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: str = "") -> List[Dict]:
-    """Check a single password/token candidate against all derivation logic"""
+    """
+    [DeepTools Engine]
+    Check a single password/token candidate against all derivation logic
+    """
     matches = []
     if not pwd: return matches
 
@@ -220,15 +232,28 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
             for coin_cls, coin_type in btc_variants:
                 try:
+                    # Pre-calculate config parameters safely
+                    p2pkh_net_ver = None
+                    bech32_hrp = None
+                    try:
+                        conf_44 = Bip44ConfGetter.GetConfig(coin_type)
+                        p2pkh_net_ver = conf_44.AddrParams().get('net_ver')
+                    except: pass
+                    try:
+                        conf_84 = Bip84ConfGetter.GetConfig(coin_type)
+                        bech32_hrp = conf_84.AddrParams().get('hrp')
+                    except: pass
+
+                    # Account derivation
+                    acc_ctx_base = coin_cls.FromSeed(seed, coin_type).Purpose().Coin()
+
                     for acc_idx in range(max_accounts):
-                        acc_ctx = coin_cls.FromSeed(seed, coin_type).Purpose().Coin().Account(acc_idx)
+                        acc_ctx = acc_ctx_base.Account(acc_idx)
                         for i in range(max_indices):
                             for chain in [Bip44Changes.CHAIN_EXT, Bip44Changes.CHAIN_INT]:
                                 try:
                                     node = acc_ctx.Change(chain).AddressIndex(i)
                                     pub_key = node.PublicKey()
-
-                                    # In exhaustive mode, check ALL address types for every path
                                     pub_bytes = pub_key.RawCompressed().ToBytes()
 
                                     check_addresses = []
@@ -237,20 +262,21 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
                                     if exhaustive:
                                         # Legacy (P2PKH)
-                                        try:
-                                            p2pkh = P2PKHAddr.EncodeKey(pub_bytes, net_ver=Bip44ConfGetter.GetConfig(coin_type).P2PKHNetVer())
-                                            check_addresses.append((p2pkh, "p2pkh"))
-                                        except: pass
+                                        if p2pkh_net_ver:
+                                            try:
+                                                p2pkh = P2PKHAddr.EncodeKey(pub_bytes, net_ver=p2pkh_net_ver)
+                                                check_addresses.append((p2pkh, "p2pkh"))
+                                            except: pass
 
                                         # SegWit (P2WPKH)
-                                        try:
-                                            p2wpkh = P2WPKHAddr.EncodeKey(pub_bytes, hrp=Bip44ConfGetter.GetConfig(coin_type).AddrParams().get('hrp'))
-                                            check_addresses.append((p2wpkh, "p2wpkh"))
-                                        except: pass
+                                        if bech32_hrp:
+                                            try:
+                                                p2wpkh = P2WPKHAddr.EncodeKey(pub_bytes, hrp=bech32_hrp)
+                                                check_addresses.append((p2wpkh, "p2wpkh"))
+                                            except: pass
 
                                         # Nested SegWit (P2SH-P2WPKH)
                                         try:
-                                            # We use Bip49.FromPublicKey to get the address easily
                                             p2sh_p2wpkh = Bip49.FromPublicKey(pub_bytes, coin_type).PublicKey().ToAddress()
                                             check_addresses.append((p2sh_p2wpkh, "p2sh-p2wpkh"))
                                         except: pass
@@ -260,7 +286,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                             matches.append({
                                                 "type": "mnemonic", "value": norm_pwd, "address": addr,
                                                 "format": fmt,
-                                                "coin": coin_type.name, "path_index": i, "account": acc_idx,
+                                                "coin": coin_type.name if hasattr(coin_type, 'name') else str(coin_type), "path_index": i, "account": acc_idx,
                                                 "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
                                                 "passphrase": passphrase
                                             })
@@ -322,7 +348,6 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
                                     # Nested SegWit (P2SH-P2WPKH)
                                     try:
-                                        # Use Bip49 to easily get P2SH-P2WPKH from the public key
                                         bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, Bip49Coins.BITCOIN)
                                         addr_p2sh = bip49_ctx.PublicKey().ToAddress()
                                         if addr_p2sh in targets:
@@ -410,8 +435,12 @@ def run_btcrecover_scan(
     workers: int = 4
 ) -> Dict:
     """
+    [DeepTools Engine]
     Exhaustive BTC recovery logic.
     """
+    if exhaustive:
+        print(f"[DeepTools] Initializing exhaustive search with {workers} workers...")
+
     results = {"found": False, "attempts": 0, "matches": []}
     targets = set(target_addresses or [])
 
