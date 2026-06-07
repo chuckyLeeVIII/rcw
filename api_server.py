@@ -29,6 +29,7 @@ class ScanRequest(BaseModel):
 class FeedRequest(BaseModel):
     tokens: Optional[List[str]] = None
     addresses: Optional[List[str]] = None
+    deep_scan: Optional[bool] = None
 
 @app.get("/api/status")
 async def get_status():
@@ -86,10 +87,16 @@ async def feed_assistant_intelligence(req: FeedRequest):
     if orchestrator.computer_scanner:
         orchestrator.computer_scanner.feed_intelligence(
             tokens=req.tokens,
-            addresses=req.addresses
+            addresses=req.addresses,
+            deep_scan=req.deep_scan
         )
 
-    return {"status": "intelligence_ingested", "tokens": len(req.tokens or []), "addresses": len(req.addresses or [])}
+    return {
+        "status": "intelligence_ingested",
+        "tokens": len(req.tokens or []),
+        "addresses": len(req.addresses or []),
+        "deep_scan": req.deep_scan if req.deep_scan is not None else (orchestrator.computer_scanner.deep_scan if orchestrator.computer_scanner else False)
+    }
 
 @app.post("/api/screenwatcher/snapshot")
 async def screenwatcher_snapshot():

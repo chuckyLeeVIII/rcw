@@ -209,8 +209,11 @@ class ComputerScannerAgent:
             self._richlist.add(address)
             print(f"[ComputerScanner] Added {address} to active richlist. Total: {len(self._richlist)}")
 
-    def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None):
+    def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None, deep_scan: Optional[bool] = None):
         """Dynamic intelligence feeding from AI Assistant"""
+        if deep_scan is not None:
+            self.deep_scan = deep_scan
+
         if addresses:
             self.add_to_richlist(addresses)
 
@@ -223,8 +226,8 @@ class ComputerScannerAgent:
             print(f"[ComputerScanner] Ingested {added_count} new recovery tokens from assistant")
 
         # Trigger an immediate recovery scan pass with the new intelligence
-        if self.is_running and (tokens or addresses):
-            print("[ComputerScanner] Intelligence update received. Triggering recovery pass.")
+        if self.is_running and (tokens or addresses or deep_scan is not None):
+            print(f"[ComputerScanner] Intelligence update received (Deep: {self.deep_scan}). Triggering recovery pass.")
             self._recovery_event.set()
 
     def _recovery_loop(self):
@@ -235,7 +238,8 @@ class ComputerScannerAgent:
                 if not self.is_running: break
 
                 with self._recovery_lock:
-                    print(f"[ComputerScanner] Starting exhaustive recovery scan with {len(self.btc_recover_tokens)} tokens...")
+                    engine_name = "DeepTools Engine" if self.deep_scan else "Standard Recovery"
+                    print(f"[ComputerScanner] [{engine_name}] Starting recovery scan with {len(self.btc_recover_tokens)} tokens...")
 
                     # Run exhaustive engine
                     results = run_btcrecover_scan(
