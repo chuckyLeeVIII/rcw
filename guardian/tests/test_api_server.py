@@ -104,21 +104,17 @@ class TestStartScanRichlist:
         assert response.status_code == 200
         scanner.add_to_richlist.assert_not_called()
 
-    def test_richlist_comma_separated_treated_as_single_string(self, client_with_scanner):
-        """Verify comma-separated addresses are now treated as a single string, not split
-
-        The old code split comma-separated addresses and called add_to_richlist with a list.
-        The new code passes the entire string as-is if its length >= 26.
-        """
+    def test_richlist_comma_separated_treated_as_list(self, client_with_scanner):
+        """Verify comma-separated addresses are treated as a list of addresses"""
         client, orchestrator, scanner = client_with_scanner
-        # Two valid addresses joined by comma; combined length is > 26
+        # Two valid addresses joined by comma
         addr1 = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH"
         addr2 = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
         combined = f"{addr1},{addr2}"
         response = client.post("/api/scan/start", json={"paths": ["/tmp"], "richlist": combined})
         assert response.status_code == 200
-        # The new code does NOT split; the whole combined string is passed
-        scanner.add_to_richlist.assert_called_once_with(combined)
+        # The code should split and pass as list
+        scanner.add_to_richlist.assert_called_once_with([addr1, addr2])
 
     def test_scan_start_returns_started_status(self, client_with_scanner):
         """Verify start_scan returns expected status and paths"""
