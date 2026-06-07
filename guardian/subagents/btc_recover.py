@@ -243,15 +243,15 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
     norm_pwd = " ".join(pwd.lower().split())
 
     # Try multiple languages in exhaustive mode
-    languages = [None] # Default (English)
+    from bip_utils.bip.bip39.bip39_mnemonic_utils import Bip39Languages
+    languages = [Bip39Languages.ENGLISH]
     if exhaustive:
-        from bip_utils.bip.bip39.bip39_mnemonic_utils import Bip39Languages
-        languages = [None, Bip39Languages.ENGLISH, Bip39Languages.SPANISH, Bip39Languages.FRENCH, Bip39Languages.ITALIAN]
+        languages = [Bip39Languages.ENGLISH, Bip39Languages.SPANISH, Bip39Languages.FRENCH, Bip39Languages.ITALIAN]
 
     for lang in languages:
         is_mnemonic = False
         try:
-            validator = Bip39MnemonicValidator(lang) if lang else Bip39MnemonicValidator()
+            validator = Bip39MnemonicValidator(lang)
             is_mnemonic = validator.IsValid(norm_pwd)
         except Exception: pass
 
