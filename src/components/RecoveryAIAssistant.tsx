@@ -140,7 +140,11 @@ export function RecoveryAIAssistant() {
           await fetch(getApiUrl('/assistant/feed'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tokens, addresses })
+            body: JSON.stringify({
+                tokens,
+                addresses,
+                deep_scan: isDeepSearchEnabled
+            })
           });
         } catch (err) {
           console.error('Failed to feed intelligence:', err);
@@ -163,7 +167,8 @@ export function RecoveryAIAssistant() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tokens: cleanTokens,
-                addresses: extractedAddrs
+                addresses: extractedAddrs,
+                deep_scan: isDeepSearchEnabled
             })
         }).catch(err => console.error('Intelligence feed error:', err));
     }
@@ -256,7 +261,8 @@ export function RecoveryAIAssistant() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         tokens: parsed.passwords,
-                        addresses: parsed.richlist
+                        addresses: parsed.richlist,
+                        deep_scan: isDeepSearchEnabled
                     })
                 });
             } catch (err) { console.error('Artifact feed failure:', err); }

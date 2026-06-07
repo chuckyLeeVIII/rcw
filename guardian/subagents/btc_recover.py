@@ -82,7 +82,7 @@ def btc_from_wif(wif: str) -> Optional[Dict[str, str]]:
         return None
 
 def generate_typos(token: str) -> Set[str]:
-    """Generate character-level mutations for a token (DeepTools exhaustive)"""
+    """Generate character-level mutations for a token (DeepTools Engine)"""
     typos = {token}
 
     # If it looks like a sentence (multi-word), try word-level mutations
@@ -90,19 +90,20 @@ def generate_typos(token: str) -> Set[str]:
         words = token.split()
         if len(words) <= 24:
             # 1. Phonetic/Common Word Substitutions
-            # In a real exhaustive search, we'd use a dictionary or visual similarity
-            subs_map = {'aboot': 'about', 'abandonn': 'abandon', 'seeeed': 'seed'}
+            subs_map = {
+                'aboot': 'about', 'abandonn': 'abandon', 'seeeed': 'seed',
+                'pass': 'password', 'key': 'private', 'secret': 'secret'
+            }
             for i, w in enumerate(words):
-                if w.lower() in subs_map:
+                wl = w.lower()
+                if wl in subs_map:
                     w2 = words[:]
-                    w2[i] = subs_map[w.lower()]
+                    w2[i] = subs_map[wl]
                     typos.add(" ".join(w2))
 
             # 2. Try single-word character typos for each word if sentence is not too long
             if len(words) <= 12:
-                # To avoid massive explosion, we only typo-mutate ONE word at a time in the sentence
                 for i, w in enumerate(words):
-                    # We need a non-recursive way to get simple character typos
                     # Omissions
                     for j in range(len(w)):
                         w2 = words[:]
@@ -116,10 +117,11 @@ def generate_typos(token: str) -> Set[str]:
                         w2[i] = "".join(chars_w)
                         typos.add(" ".join(w2))
                     # Common substitutions
-                    keyboard_adj = {'o': '0p', 'i': '1u', 'a': 'sq', 's': 'ad'}
+                    keyboard_adj = {'o': '0p', 'i': '1u', 'a': 'sq', 's': 'ad', 'e': '3r'}
                     for j, c in enumerate(w):
-                        if c.lower() in keyboard_adj:
-                            for adj in keyboard_adj[c.lower()]:
+                        cl = c.lower()
+                        if cl in keyboard_adj:
+                            for adj in keyboard_adj[cl]:
                                 w2 = words[:]
                                 chars_w = list(w)
                                 chars_w[j] = adj
@@ -143,13 +145,13 @@ def generate_typos(token: str) -> Set[str]:
             c3[i], c3[i+2] = c3[i+2], c3[i]
             typos.add("".join(c3))
 
-    # 3. Common Substitutions & Keyboard Proximity & Phonetic
+    # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools v2)
     subs_list = [
         {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
          'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
          'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
         {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n',
-         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y'}
+         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y', 'l': 'i', 'i': 'l'}
     ]
 
     keyboard_adj = {
@@ -181,29 +183,29 @@ def generate_typos(token: str) -> Set[str]:
         if i < len(chars) - 1:
             typos.add("".join(chars[:i+1] + [chars[i]] + chars[i+1:]))
 
-    # 6. Reversal
+    # 5. Reversal
     typos.add(token[::-1])
 
-    # 7. Visual mutations (m -> rn, etc)
-    if 'm' in token: typos.add(token.replace('m', 'rn'))
-    if 'rn' in token: typos.add(token.replace('rn', 'm'))
-    if 'vv' in token: typos.add(token.replace('vv', 'w'))
-    if 'w' in token: typos.add(token.replace('w', 'vv'))
+    # 6. Visual mutations (m -> rn, etc)
+    visuals = [('m', 'rn'), ('rn', 'm'), ('vv', 'w'), ('w', 'vv'), ('l', '1'), ('1', 'l'), ('0', 'O'), ('O', '0'), ('S', '5'), ('5', 'S')]
+    for src, dst in visuals:
+        if src in token: typos.add(token.replace(src, dst))
+        if src.upper() in token: typos.add(token.replace(src.upper(), dst.upper()))
 
     # 7. Character-level casing (for short tokens)
-    if len(token) <= 10:
+    if len(token) <= 12:
         for i in range(len(chars)):
             c2 = chars[:]
             c2[i] = c2[i].swapcase()
             typos.add("".join(c2))
 
     # 8. Per-character casing permutations (only for very short strings to avoid explosion)
-    if len(token) <= 6:
+    if len(token) <= 7:
         for combo in itertools.product(*[(c.lower(), c.upper()) for c in token]):
             typos.add("".join(combo))
 
     # 9. Exhaustive padding variations
-    paddings = ["!", "1", "123", "0", "_", "-", "@", "*", "$", ".", " "]
+    paddings = ["!", "1", "123", "0", "_", "-", "@", "*", "$", ".", " ", "?", "#"]
     for p in paddings:
         typos.add(p + token)
         typos.add(token + p)
@@ -233,18 +235,28 @@ def generate_permutations(tokens: List[str], max_len: int = 3) -> Set[str]:
     return perms
 
 def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: str = "") -> List[Dict]:
-    """Check a single password/token candidate against all derivation logic"""
+    """Check a single password/token candidate against all derivation logic (DeepTools Engine)"""
     matches = []
     if not pwd: return matches
 
     # 1. As mnemonic
     norm_pwd = " ".join(pwd.lower().split())
-    is_mnemonic = False
-    try:
-        is_mnemonic = Bip39MnemonicValidator().IsValid(norm_pwd)
-    except Exception: pass
 
-    if is_mnemonic:
+    # Try multiple languages in exhaustive mode
+    languages = [None] # Default (English)
+    if exhaustive:
+        from bip_utils.bip.bip39.bip39_mnemonic_utils import Bip39Languages
+        languages = [None, Bip39Languages.ENGLISH, Bip39Languages.SPANISH, Bip39Languages.FRENCH, Bip39Languages.ITALIAN]
+
+    for lang in languages:
+        is_mnemonic = False
+        try:
+            validator = Bip39MnemonicValidator(lang) if lang else Bip39MnemonicValidator()
+            is_mnemonic = validator.IsValid(norm_pwd)
+        except Exception: pass
+
+        if not is_mnemonic: continue
+
         try:
             seed = Bip39SeedGenerator(norm_pwd).Generate(passphrase)
 
@@ -520,11 +532,13 @@ def run_btcrecover_scan(
 
     # Process candidates in parallel for "bulletproof" speed
     if exhaustive and len(candidates) > 5:
+        print(f"[DeepTools Engine] Running exhaustive search on {len(candidates)} candidates...")
+
         # For exhaustive, we also try cross-pollinating tokens as passphrases for mnemonics
         passphrases = [""]
         if exhaustive:
-            # Add top 5 candidates as potential passphrases to avoid explosion but catch common ones
-            passphrases.extend(list(candidates)[:5])
+            # Add top 10 candidates as potential passphrases to avoid explosion but catch common ones
+            passphrases.extend(list(candidates)[:10])
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
             all_futures = []
@@ -543,6 +557,8 @@ def run_btcrecover_scan(
                 except Exception as e:
                     print(f"DEBUG: worker error: {e}")
     else:
+        if exhaustive:
+            print(f"[DeepTools Engine] Running exhaustive search on {len(candidates)} candidates (Single-Threaded)...")
         for pwd in candidates:
             found_matches = check_candidate(pwd, targets, exhaustive)
             if found_matches:
