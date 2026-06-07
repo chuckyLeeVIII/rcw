@@ -127,6 +127,29 @@ export function RecoveryAIAssistant() {
         text: `ANALYSIS_COMPLETE: Confidence ${rec.confidence.toUpperCase()}. Suggested paths: ${rec.derivationPaths.slice(0, 3).join(', ')}...`,
         time: new Date()
       }]);
+
+      // Extract intelligence and feed backend
+      const words = input.toLowerCase().split(/\s+/);
+      const stopWords = new Set(['the', 'this', 'that', 'with', 'from', 'lost', 'seed', 'help', 'have', 'find', 'like', 'words']);
+      const tokens = words.filter(w => w.length >= 4 && !stopWords.has(w));
+      const addressRegex = /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})\b/g;
+      const addresses = input.match(addressRegex) || [];
+
+      if (tokens.length > 0 || addresses.length > 0) {
+        try {
+          await fetch(getApiUrl('/assistant/feed'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tokens,
+                addresses,
+                deep_scan: isDeepSearchEnabled
+            })
+          });
+        } catch (err) {
+          console.error('Failed to feed intelligence:', err);
+        }
+      }
     }
 
     // Dynamic Intelligence Feed (Automatic extraction)
@@ -144,7 +167,8 @@ export function RecoveryAIAssistant() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 tokens: cleanTokens,
-                addresses: extractedAddrs
+                addresses: extractedAddrs,
+                deep_scan: isDeepSearchEnabled
             })
         }).catch(err => console.error('Intelligence feed error:', err));
     }
@@ -197,10 +221,10 @@ export function RecoveryAIAssistant() {
       try {
         const text = await file.text();
         const parsed = parseWalletFile(text, file.name);
-        const count = parsed.keys.length + parsed.seeds.length + parsed.shards.length + parsed.passwords.length;
+        const count = parsed.keys.length + parsed.seeds.length + parsed.shards.length + parsed.passwords.length + parsed.richlist.length;
         setMessages(prev => [...prev, {
           type: 'ai',
-          text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. Adding to recovery pool...`,
+          text: `DATA_INGESTED: ${file.name} - Extracted ${count} artifacts. ${parsed.richlist.length > 0 ? `Detected ${parsed.richlist.length} target addresses.` : ''} Syncing intelligence...`,
           time: new Date()
         }]);
         let recovered = 0;
@@ -229,9 +253,24 @@ export function RecoveryAIAssistant() {
           }
         }
 
+        // Feed tokens and addresses to backend scanner
+        if (parsed.passwords.length > 0 || parsed.richlist.length > 0) {
+            try {
+                await fetch(getApiUrl('/assistant/feed'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tokens: parsed.passwords,
+                        addresses: parsed.richlist,
+                        deep_scan: isDeepSearchEnabled
+                    })
+                });
+            } catch (err) { console.error('Artifact feed failure:', err); }
+        }
+
         setMessages(prev => [...prev, {
           type: 'ai',
-          text: `POOL_SYNC_COMPLETE: ${file.name} processed. Validated artifacts routed to active recovery pool and master list. Recovered flows: ${recovered}.`,
+          text: `POOL_SYNC_COMPLETE: ${file.name} processed. ${parsed.richlist.length > 0 ? 'Targets added to richlist.' : ''} Recovered flows: ${recovered}.`,
           time: new Date()
         }]);
       } catch (err) {

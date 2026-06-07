@@ -7,11 +7,12 @@ export interface ParsedWalletFile {
   seeds: string[];
   shards: string[];
   passwords: string[];
+  richlist: string[];
   error?: string;
 }
 
 export function parseWalletFile(content: string, filename: string): ParsedWalletFile {
-  const result: ParsedWalletFile = { keys: [], seeds: [], shards: [], passwords: [] };
+  const result: ParsedWalletFile = { keys: [], seeds: [], shards: [], passwords: [], richlist: [] };
   
   try {
     // Try JSON parsing first (MetaMask, MyEtherWallet, etc.)
@@ -57,10 +58,18 @@ export function parseWalletFile(content: string, filename: string): ParsedWallet
     // Text-based parsing for .txt, .key, .csv files
     const lines = content.split(/\r?\n/);
     
+    const addressRegex = /^(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})$/;
+
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
       
+      // Crypto Addresses (Richlist ingestion)
+      if (addressRegex.test(trimmed)) {
+        result.richlist.push(trimmed);
+        continue;
+      }
+
       // Private key (hex 64 chars)
       if (/^[a-f0-9]{64}$/i.test(trimmed)) {
         result.keys.push(trimmed);
