@@ -200,6 +200,17 @@ def generate_typos(token: str) -> Set[str]:
     if '0' in token: typos.add(token.replace('0', 'o'))
     if 'l' in token: typos.add(token.replace('l', '1'))
     if '1' in token: typos.add(token.replace('1', 'l'))
+    if 's' in token: typos.add(token.replace('s', '5'))
+    if '5' in token: typos.add(token.replace('5', 's'))
+    if 'b' in token: typos.add(token.replace('b', '8'))
+    if '8' in token: typos.add(token.replace('8', 'b'))
+    if 'e' in token: typos.add(token.replace('e', '3'))
+    if '3' in token: typos.add(token.replace('3', 'e'))
+    if 'a' in token: typos.add(token.replace('a', '4'))
+    if '4' in token: typos.add(token.replace('4', 'a'))
+    if 'g' in token:
+        typos.add(token.replace('g', '6'))
+        typos.add(token.replace('g', '9'))
 
     # 7. Character-level casing (for short tokens)
     if len(token) <= 12:
@@ -392,17 +403,42 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                             for path_template in extra_paths:
                                 for i in range(max_indices):
                                     try:
-                                        bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, Bip49Coins.BITCOIN)
-                                        addr_p2sh = bip49_ctx.PublicKey().ToAddress()
-                                        if addr_p2sh in targets:
-                                            matches.append({
-                                                "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2sh,
-                                                "path": path, "script": "P2SH-P2WPKH", "passphrase": passphrase
-                                            })
-                                    except: pass
-                                except: pass
+                                        path = path_template.format(i)
+                                        node = root_ctx.DerivePath(path)
+                                        pub_key = node.PublicKey()
+                                        pub_bytes = pub_key.RawCompressed().ToBytes()
 
-                            except (Bip32KeyError, Exception): pass
+                                        # Check multiple formats for each extra path
+                                        check_addrs = []
+                                        # Legacy
+                                        if net_ver:
+                                            try:
+                                                check_addrs.append((P2PKHAddr.EncodeKey(pub_bytes, net_ver=net_ver), "P2PKH"))
+                                            except: pass
+                                        # SegWit
+                                        if hrp:
+                                            try:
+                                                check_addrs.append((P2WPKHAddr.EncodeKey(pub_bytes, hrp=hrp), "P2WPKH"))
+                                            except: pass
+                                        # Nested SegWit
+                                        try:
+                                            p2sh = Bip49.FromPublicKey(pub_bytes, coin_type).PublicKey().ToAddress()
+                                            check_addrs.append((p2sh, "P2SH-P2WPKH"))
+                                        except: pass
+
+                                        for addr, script_type in check_addrs:
+                                            if addr in targets:
+                                                matches.append({
+                                                    "type": "mnemonic_extra_path",
+                                                    "value": norm_pwd,
+                                                    "address": addr,
+                                                    "path": path,
+                                                    "script": script_type,
+                                                    "coin": coin_name,
+                                                    "passphrase": passphrase
+                                                })
+                                    except: pass
+                        except (Bip32KeyError, Exception): pass
                 except Exception: pass
         except Exception: pass
 
