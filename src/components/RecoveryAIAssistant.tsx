@@ -88,26 +88,23 @@ export function RecoveryAIAssistant() {
         }]);
 
         // If addresses found, add them to richlist via API
-        if (foundAddresses.length > 0) {
-            try {
-                await fetch(getApiUrl('/scan/start'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        paths: ['.'],
-                        richlist: foundAddresses.join(','),
-                        deep_scan: true,
-                        recovery_tokens: messages
-                            .filter(m => m.type === 'user')
-                            .map(m => m.text)
-                            .concat([query])
-                    }),
-                });
-                setIsScannerRunning(true);
-            } catch (err) { console.error(err); }
-        } else if (!isScannerRunning) {
-            setTimeout(() => toggleScanner(true), 500);
-        }
+        try {
+            await fetch(getApiUrl('/scan/start'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    paths: ['.'],
+                    richlist: foundAddresses.length > 0 ? foundAddresses.join(',') : undefined,
+                    deep_scan: true,
+                    recovery_tokens: messages
+                        .filter(m => m.type === 'user')
+                        .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
+                        .concat([query])
+                        .filter(t => t.length > 0)
+                }),
+            });
+            setIsScannerRunning(true);
+        } catch (err) { console.error(err); }
     } else if (input.toLowerCase() === 'start mixhunter') {
         toggleMixHunter();
     } else if (/^(0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})$/.test(input)) {
