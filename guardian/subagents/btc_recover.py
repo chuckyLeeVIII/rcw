@@ -387,22 +387,51 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                             net_ver = conf.AddrParams().get('net_ver')
                             try:
                                 hrp = Bip84ConfGetter.GetConfig(coin_type).AddrParams().get('hrp')
-                            except: hrp = None
+                            except Exception: hrp = None
 
                             for path_template in extra_paths:
                                 for i in range(max_indices):
                                     try:
-                                        bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, Bip49Coins.BITCOIN)
-                                        addr_p2sh = bip49_ctx.PublicKey().ToAddress()
-                                        if addr_p2sh in targets:
-                                            matches.append({
-                                                "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2sh,
-                                                "path": path, "script": "P2SH-P2WPKH", "passphrase": passphrase
-                                            })
-                                    except: pass
-                                except: pass
+                                        path = path_template.format(i)
+                                        node = root_ctx.DerivePath(path)
+                                        pub_key = node.PublicKey()
+                                        pub_bytes = pub_key.RawCompressed().ToBytes()
 
-                            except (Bip32KeyError, Exception): pass
+                                        check_addresses = []
+                                        # Legacy (P2PKH)
+                                        if net_ver:
+                                            try:
+                                                p2pkh = P2PKHAddr.EncodeKey(pub_bytes, net_ver=net_ver)
+                                                check_addresses.append((p2pkh, "p2pkh"))
+                                            except Exception: pass
+
+                                        # SegWit (P2WPKH)
+                                        if hrp:
+                                            try:
+                                                p2wpkh = P2WPKHAddr.EncodeKey(pub_bytes, hrp=hrp)
+                                                check_addresses.append((p2wpkh, "p2wpkh"))
+                                            except Exception: pass
+
+                                        # Nested SegWit (P2SH-P2WPKH)
+                                        try:
+                                            # Fallback to matching Bip49Coins if possible
+                                            p2sh_coin = coin_type
+                                            if coin_type == Bip44Coins.BITCOIN: p2sh_coin = Bip49Coins.BITCOIN
+                                            elif coin_type == Bip44Coins.LITECOIN: p2sh_coin = Bip49Coins.LITECOIN
+
+                                            p2sh_p2wpkh = Bip49.FromPublicKey(pub_bytes, p2sh_coin).PublicKey().ToAddress()
+                                            check_addresses.append((p2sh_p2wpkh, "p2sh-p2wpkh"))
+                                        except Exception: pass
+
+                                        for addr, fmt in check_addresses:
+                                            if addr in targets:
+                                                matches.append({
+                                                    "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr,
+                                                    "format": fmt, "coin": coin_name,
+                                                    "path": path, "passphrase": passphrase
+                                                })
+                                    except Exception: pass
+                        except Exception: pass
                 except Exception: pass
         except Exception: pass
 
