@@ -149,12 +149,15 @@ def generate_typos(token: str) -> Set[str]:
             typos.add("".join(c3))
 
     # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools v2)
+    # Using list of single-key dicts to support multiple variants per character without collisions
     subs_list = [
-        {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
-         'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
-         'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
-        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n',
-         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y', 'l': 'i', 'i': 'l'}
+        {'o': '0'}, {'0': 'o'}, {'0': 'O'}, {'i': '1'}, {'1': 'i'}, {'l': '1'}, {'e': '3'}, {'3': 'e'},
+        {'a': '4'}, {'4': 'a'}, {'s': '5'}, {'5': 's'}, {'t': '7'}, {'7': 't'},
+        {'g': '9'}, {'9': 'g'}, {'z': '2'}, {'2': 'z'}, {'b': '8'}, {'8': 'b'},
+        {'s': '$'}, {'a': '@'}, {'i': '!'}, {'e': '€'}, {'b': '6'}, {'f': 'ph'}, {'v': 'u'}, {'u': 'v'},
+        {'n': 'm'}, {'m': 'n'}, {'ph': 'f'}, {'ck': 'k'}, {'k': 'ck'}, {'sh': 'sch'}, {'sch': 'sh'},
+        {'y': 'ie'}, {'ie': 'y'}, {'l': 'i'}, {'i': 'l'}, {'l': 'I'}, {'i': 'I'}, {'i': '!'},
+        {'b': '6'}, {'g': '6'}, {'6': 'b'}, {'6': 'g'}, {'9': 'g'}
     ]
 
     keyboard_adj = {
@@ -559,8 +562,8 @@ def run_btcrecover_scan(
         # For exhaustive, we also try cross-pollinating tokens as passphrases for mnemonics
         passphrases = [""]
         if exhaustive:
-            # Add top 10 candidates as potential passphrases to avoid explosion but catch common ones
-            passphrases.extend(list(candidates)[:10])
+            # Add top 20 candidates as potential passphrases to avoid explosion but catch common ones
+            passphrases.extend(list(candidates)[:20])
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
             all_futures = []

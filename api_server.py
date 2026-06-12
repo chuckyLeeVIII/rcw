@@ -31,6 +31,9 @@ class FeedRequest(BaseModel):
     addresses: Optional[List[str]] = None
     deep_scan: Optional[bool] = None
 
+class MixHunterRequest(BaseModel):
+    workers: int = 2
+
 @app.get("/api/status")
 async def get_status():
     if not orchestrator:
@@ -147,3 +150,23 @@ async def get_prices():
     if not orchestrator:
         return {"error": "Orchestrator not initialized"}
     return orchestrator._get_live_prices()
+
+@app.post("/api/mixhunter/start")
+async def start_mixhunter(req: MixHunterRequest):
+    if not orchestrator:
+        return {"error": "Orchestrator not available"}
+    try:
+        orchestrator.start_mix_hunter(workers=req.workers)
+        return {"status": "started", "workers": req.workers}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/mixhunter/stop")
+async def stop_mixhunter():
+    if not orchestrator:
+        return {"error": "Orchestrator not available"}
+    try:
+        orchestrator.stop_mix_hunter()
+        return {"status": "stopped"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

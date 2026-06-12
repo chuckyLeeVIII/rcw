@@ -23,6 +23,7 @@ import time
 from guardian.subagents.key_reducer import KeyReducerAgent, KeyFound
 from guardian.subagents.computer_scanner import ComputerScannerAgent, ScanHit
 from guardian.subagents.screen_watcher import ScreenWatcherAgent
+from guardian.subagents.mixhunter import MixHunterEngine
 from vault.service import Vault
 
 # Common high-value ERC20 tokens for discovery enrichment
@@ -216,6 +217,7 @@ class MultimodalOrchestrator:
         self.key_reducer: Optional[KeyReducerAgent] = None
         self.computer_scanner: Optional[ComputerScannerAgent] = None
         self.screen_watcher: Optional[ScreenWatcherAgent] = None
+        self.mix_hunter: Optional[MixHunterEngine] = None
         
         # State
         self._running = False
@@ -386,6 +388,8 @@ class MultimodalOrchestrator:
 
         if self.screen_watcher:
             self.screen_watcher.stop()
+
+        self.stop_mix_hunter()
         
         for t in self._threads:
             t.join(timeout=2)
@@ -545,6 +549,7 @@ class MultimodalOrchestrator:
             'agents': {
                 'key_reducer': {'running': self.key_reducer.is_running if self.key_reducer else False},
                 'screen_watcher': {'running': self.screen_watcher.is_running if self.screen_watcher else False},
+                'mixhunter': {'running': self.mix_hunter._running if self.mix_hunter else False},
             }
         }
         
@@ -578,3 +583,19 @@ class MultimodalOrchestrator:
             timestamp=datetime.now(timezone.utc),
         )
         self._event_queue.put_nowait(event)
+
+    def start_mix_hunter(self, workers: int = 2):
+        """Initialize and start the high-speed hunting engine"""
+        if not self.mix_hunter:
+            self.mix_hunter = MixHunterEngine(assistant=self)
+
+        # Sync richlist from computer scanner
+        if self.computer_scanner:
+            self.mix_hunter.target_addresses = self.computer_scanner._richlist
+
+        self.mix_hunter.start(num_workers=workers)
+
+    def stop_mix_hunter(self):
+        """Stop the hunting engine"""
+        if self.mix_hunter:
+            self.mix_hunter.stop()
