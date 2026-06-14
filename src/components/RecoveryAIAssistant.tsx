@@ -91,8 +91,8 @@ export function RecoveryAIAssistant() {
         const sessionTokens = messages
             .filter(m => m.type === 'user')
             .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
-            .filter(t => t.length > 0)
-            .concat([query]);
+            .concat([query])
+            .filter(t => t.length > 0);
 
         try {
             await fetch(getApiUrl('/scan/start'), {
