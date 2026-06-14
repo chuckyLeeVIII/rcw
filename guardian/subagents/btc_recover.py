@@ -151,13 +151,27 @@ def generate_typos(token: str) -> Set[str]:
             c3[i], c3[i+2] = c3[i+2], c3[i]
             typos.add("".join(c3))
 
-    # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools v2)
+    # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools Engine v5.0)
     subs_list = [
         {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
          'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
          'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
         {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n',
-         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y', 'l': 'i', 'i': 'l'}
+         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y', 'l': 'i', 'i': 'l'},
+        {'o': '0', '0': 'o', 'i': 'l', 'l': 'i', 'i': '1', '1': 'i', 'l': '1', '1': 'l', 's': '5', '5': 's', 'b': '8', '8': 'b',
+         'e': '3', '3': 'e', 'a': '4', '4': 'a', 'g': '6', '6': 'g', 'q': '9', '9': 'q'}
+    # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools v2)
+    # Using list of dicts to handle multiple substitutions per character
+    # Keys should be lowercase to match cl
+    subs_list = [
+        {'o': '0'}, {'0': 'o'}, {'i': '1'}, {'1': 'i'}, {'l': '1'}, {'e': '3'}, {'3': 'e'},
+        {'a': '4'}, {'4': 'a'}, {'s': '5'}, {'5': 's'}, {'t': '7'}, {'7': 't'},
+        {'g': '9'}, {'9': 'g'}, {'z': '2'}, {'2': 'z'}, {'b': '8'}, {'8': 'b'},
+        {'i': 'l'}, {'l': 'i'}, {'i': 'I'}, {'l': 'I'},
+        {'s': '$'}, {'a': '@'}, {'i': '!'}, {'e': '€'}, {'b': '6'}, {'f': 'ph'},
+        {'v': 'u'}, {'u': 'v'}, {'n': 'm'}, {'m': 'n'}, {'ph': 'f'}, {'ck': 'k'},
+        {'k': 'ck'}, {'sh': 'sch'}, {'sch': 'sh'}, {'y': 'ie'}, {'ie': 'y'},
+        {'g': '6'}, {'6': 'g'}, {'o': 'O'}
     ]
 
     keyboard_adj = {
@@ -203,6 +217,21 @@ def generate_typos(token: str) -> Set[str]:
     if '0' in token: typos.add(token.replace('0', 'o'))
     if 'l' in token: typos.add(token.replace('l', '1'))
     if '1' in token: typos.add(token.replace('1', 'l'))
+    if 's' in token: typos.add(token.replace('s', '5'))
+    if '5' in token: typos.add(token.replace('5', 's'))
+    if 'b' in token: typos.add(token.replace('b', '8'))
+    if '8' in token: typos.add(token.replace('8', 'b'))
+    if 'e' in token: typos.add(token.replace('e', '3'))
+    if '3' in token: typos.add(token.replace('3', 'e'))
+    if 'a' in token: typos.add(token.replace('a', '4'))
+    if '4' in token: typos.add(token.replace('4', 'a'))
+    if 'g' in token:
+        typos.add(token.replace('g', '6'))
+        typos.add(token.replace('g', '9'))
+    if 'I' in token: typos.add(token.replace('I', 'l'))
+    if 'l' in token: typos.add(token.replace('l', 'I'))
+    if 'I' in token: typos.add(token.replace('I', '1'))
+    if '1' in token: typos.add(token.replace('1', 'I'))
 
     # 7. Character-level casing (for short tokens)
     if len(token) <= 12:
@@ -308,6 +337,39 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                 is_mnemonic = validator.IsValid(cand)
             except Exception: pass
 
+        try:
+            seed = Bip39SeedGenerator(norm_pwd).Generate(passphrase)
+
+            # Standard BIP paths for BTC
+            btc_variants = [
+        (Bip84, Bip84Coins.BITCOIN), (Bip86, Bip86Coins.BITCOIN),
+        (Bip44, Bip44Coins.BITCOIN), (Bip49, Bip49Coins.BITCOIN)
+            ]
+
+            # Multi-coin support for exhaustive mode
+            if exhaustive:
+                btc_variants.extend([
+                    (Bip44, Bip44Coins.ETHEREUM), (Bip44, Bip44Coins.ETHEREUM_CLASSIC),
+                    (Bip44, Bip44Coins.LITECOIN), (Bip49, Bip49Coins.LITECOIN), (Bip84, Bip84Coins.LITECOIN),
+                    (Bip44, Bip44Coins.DOGECOIN), (Bip44, Bip44Coins.DASH), (Bip44, Bip44Coins.BITCOIN_CASH)
+                ])
+
+            max_accounts = 25 if exhaustive else 1
+            max_indices = 1000 if exhaustive else 20
+
+            for coin_cls, coin_type in btc_variants:
+                try:
+                    # Pre-calculate config parameters safely
+                    p2pkh_net_ver = None
+                    bech32_hrp = None
+                    try:
+                        conf_44 = Bip44ConfGetter.GetConfig(coin_type)
+                        p2pkh_net_ver = conf_44.AddrParams().get('net_ver')
+                    except: pass
+                    try:
+                        conf_84 = Bip84ConfGetter.GetConfig(coin_type)
+                        bech32_hrp = conf_84.AddrParams().get('hrp')
+                    except: pass
             if not is_mnemonic: continue
 
             try:
@@ -437,6 +499,132 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                 for path_template in extra_paths:
                                     for i in range(max_indices):
                                         try:
+                                            p2sh_p2wpkh = Bip49.FromPublicKey(pub_bytes, coin_type).PublicKey().ToAddress()
+                                            check_addresses.append((p2sh_p2wpkh, "p2sh-p2wpkh"))
+                                        except: pass
+
+                                    for addr, fmt in check_addresses:
+                                        if addr in targets:
+                                            matches.append({
+                                                "type": "mnemonic", "value": norm_pwd, "address": addr,
+                                                "format": fmt,
+                                                "coin": coin_type.name if hasattr(coin_type, 'name') else str(coin_type), "path_index": i, "account": acc_idx,
+                                                "chain": "external" if chain == Bip44Changes.CHAIN_EXT else "internal",
+                                                "passphrase": passphrase
+                                            })
+                                except Exception: pass
+                except Exception: pass
+
+            # Deep search extra paths (Electrum, MultiBit, BIP-45, BIP-48, etc.)
+            if exhaustive:
+                try:
+                    # In exhaustive mode, we check extra paths for major coins
+                    extra_coins = [
+                        (Bip44Coins.BITCOIN, "btc"),
+                        (Bip44Coins.LITECOIN, "ltc"),
+                        (Bip44Coins.DOGECOIN, "doge"),
+                    ]
+
+                    root_ctx = Bip32Secp256k1.FromSeed(seed)
+                    # Expanded paths for deep discovery
+                    extra_paths = [
+                        # m/0/n (Electrum Standard)
+                        "m/0/{}", "m/0/0/{}",
+                        # m/0'/0/n (BIP-32 Legacy)
+                        "m/0'/0/{}", "m/0'/0/0/{}",
+                        # BIP-44 Fork/Legacy variants
+                        "m/44'/0'/0'/0/{}", "m/44'/0'/0'/{}", "m/44'/0'/1'/0/{}",
+                        # BIP-45 (Multisig)
+                        "m/45'/0/{}", "m/45'/0/0/{}",
+                        # BIP-48 (Multisig) - m/48'/coin'/account'/script'/change/index
+                        "m/48'/0'/0'/1'/0/{}", "m/48'/0'/0'/2'/0/{}",
+                        # Blockchain.info Legacy
+                        "m/0'/{}",
+                        # Copay / BitPay
+                        "m/0'/0/{}",
+                    ]
+
+                    for coin_type_extra, coin_name_extra in extra_coins:
+                        try:
+                            conf_extra = Bip44ConfGetter.GetConfig(coin_type_extra)
+                            net_ver_extra = conf_extra.AddrParams().get('net_ver')
+                            try:
+                                hrp_extra = Bip84ConfGetter.GetConfig(coin_type_extra).AddrParams().get('hrp')
+                            except: hrp_extra = None
+
+                            for path_template in extra_paths:
+                                for i_extra in range(max_indices):
+                                    try:
+                                        path = path_template.format(i)
+                                        node = root_ctx.DerivePath(path)
+                                        pub_key = node.PublicKey()
+                                        pub_bytes = pub_key.RawCompressed().ToBytes()
+
+                                        # Check multiple formats for each extra path
+                                        check_addrs = []
+                                        # Legacy
+                                        if net_ver:
+                                            try:
+                                                check_addrs.append((P2PKHAddr.EncodeKey(pub_bytes, net_ver=net_ver), "P2PKH"))
+                                            except: pass
+                                        # SegWit
+                                        if hrp:
+                                            try:
+                                                check_addrs.append((P2WPKHAddr.EncodeKey(pub_bytes, hrp=hrp), "P2WPKH"))
+                                            except: pass
+                                        # Nested SegWit
+                                        try:
+                                            bip49_coin = Bip49Coins[coin_type.name]
+                                            p2sh = Bip49.FromPublicKey(pub_bytes, bip49_coin).PublicKey().ToAddress()
+                                            check_addrs.append((p2sh, "P2SH-P2WPKH"))
+                                        except: pass
+
+                                        for addr, script_type in check_addrs:
+                                            if addr in targets:
+                                                matches.append({
+                                                    "type": "mnemonic_extra_path",
+                                                    "value": norm_pwd,
+                                                    "address": addr,
+                                                    "path": path,
+                                                    "script": script_type,
+                                                    "coin": coin_name,
+                                                    "passphrase": passphrase
+                                                })
+                                    except: pass
+                        except (Bip32KeyError, Exception): pass
+                                        path_extra = path_template.format(i_extra)
+                                        node_extra = root_ctx.DerivePath(path_extra)
+                                        pub_key_extra = node_extra.PublicKey()
+                                        pub_bytes_extra = pub_key_extra.RawCompressed().ToBytes()
+
+                                        # Check multiple formats for each extra path
+                                        check_addrs = []
+                                        # 1. P2PKH
+                                        if net_ver_extra:
+                                            try:
+                                                check_addrs.append((P2PKHAddr.EncodeKey(pub_bytes_extra, net_ver=net_ver_extra), "P2PKH"))
+                                            except: pass
+                                        # 2. P2WPKH
+                                        if hrp_extra:
+                                            try:
+                                                check_addrs.append((P2WPKHAddr.EncodeKey(pub_bytes_extra, hrp=hrp_extra), "P2WPKH"))
+                                            except: pass
+                                        # 3. P2SH-P2WPKH
+                                        try:
+                                            addr_p2sh_extra = Bip49.FromPublicKey(pub_bytes_extra, coin_type_extra).PublicKey().ToAddress()
+                                            check_addrs.append((addr_p2sh_extra, "P2SH-P2WPKH"))
+                                        except: pass
+
+                                        for addr, fmt in check_addrs:
+                                            if addr in targets:
+                                                matches.append({
+                                                    "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr,
+                                                    "path": path_extra, "format": fmt, "coin": coin_name_extra, "passphrase": passphrase
+                                                })
+                                    except Exception: pass
+                        except Exception: pass
+                except Exception: pass
+        except Exception: pass
                                             path = path_template.format(i)
                                             node = root_ctx.DerivePath(path)
                                             pub_key = node.PublicKey()
@@ -523,6 +711,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
         except: pass
 
 
+        except Exception: pass
     # 2. As raw hex key (Brainwallet or Raw)
     potential_keys = []
     if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
@@ -647,8 +836,11 @@ def run_btcrecover_scan(
         # For exhaustive, we also try cross-pollinating tokens as passphrases for mnemonics
         passphrases = [""]
         if exhaustive:
-            # Add top 10 candidates as potential passphrases to avoid explosion but catch common ones
-            passphrases.extend(list(candidates)[:10])
+            # DeepTools Engine: Exhaustive cross-pollination
+            # Use original tokens and top candidates as potential passphrases
+            pp_candidates = set(tokenlist or [])
+            pp_candidates.update(list(candidates)[:20])
+            passphrases.extend(list(pp_candidates))
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
             all_futures = []

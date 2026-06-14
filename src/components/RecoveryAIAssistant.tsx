@@ -88,6 +88,12 @@ export function RecoveryAIAssistant() {
         }]);
 
         // If addresses found, add them to richlist via API
+        const sessionTokens = messages
+            .filter(m => m.type === 'user')
+            .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
+            .concat([query])
+            .filter(t => t.length > 0);
+
         try {
             await fetch(getApiUrl('/scan/start'), {
                 method: 'POST',
@@ -96,6 +102,7 @@ export function RecoveryAIAssistant() {
                     paths: ['.'],
                     richlist: foundAddresses.length > 0 ? foundAddresses.join(',') : undefined,
                     deep_scan: true,
+                    recovery_tokens: sessionTokens
                     recovery_tokens: messages
                         .filter(m => m.type === 'user')
                         .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
@@ -177,13 +184,25 @@ export function RecoveryAIAssistant() {
     try {
       const deep = forceDeep ?? isDeepSearchEnabled;
       const endpoint = isScannerRunning ? 'stop' : 'start';
+
+      // Aggregating session intelligence for scan start
+      const sessionTokens = messages
+        .filter(m => m.type === 'user')
+        .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
+        .filter(t => t.length > 0);
+
+      // Extract all addresses from session
+      const addressRegex = /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})\b/g;
+      const sessionAddresses = messages
+        .filter(m => m.type === 'user')
+        .flatMap(m => m.text.match(addressRegex) || []);
+      const uniqueAddresses = Array.from(new Set(sessionAddresses));
+
       const body = isScannerRunning ? undefined : JSON.stringify({
         paths: ['.'],
         deep_scan: deep,
-        recovery_tokens: messages
-          .filter(m => m.type === 'user')
-          .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
-          .filter(t => t.length > 0)
+        richlist: uniqueAddresses.length > 0 ? uniqueAddresses.join(',') : undefined,
+        recovery_tokens: sessionTokens
       });
       const res = await fetch(getApiUrl(`/scan/${endpoint}`), {
         method: 'POST',
