@@ -48,24 +48,17 @@ async def start_scan(req: ScanRequest):
     orchestrator.computer_scanner.btc_recover_tokens = req.recovery_tokens or []
 
     if req.richlist:
-        # If richlist is a file path that exists, load it
         if os.path.exists(req.richlist):
             orchestrator.computer_scanner.richlist_path = req.richlist
             orchestrator.computer_scanner._load_richlist()
         else:
-            # Handle comma-separated addresses or single address
-            if len(req.richlist) >= 26:
-                orchestrator.computer_scanner.add_to_richlist(req.richlist)
             addrs = [a.strip() for a in req.richlist.split(',') if a.strip()]
             valid_addrs = [a for a in addrs if len(a) >= 26]
             if valid_addrs:
-                # If only one, pass as string for backward compatibility, else list
-                to_add = valid_addrs[0] if len(valid_addrs) == 1 else valid_addrs
-                orchestrator.computer_scanner.add_to_richlist(to_add)
+                orchestrator.computer_scanner.add_to_richlist(valid_addrs)
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
-
 
 @app.post("/api/scan/stop")
 async def stop_scan():
@@ -82,12 +75,10 @@ async def feed_assistant_intelligence(req: FeedRequest):
     if not orchestrator:
         return {"error": "Orchestrator not available"}
 
-    # 1. Feed text to KeyReducer for normalization and balance checking
     if req.tokens:
         for token in req.tokens:
             orchestrator.feed_text(token, source="assistant_feed")
 
-    # 2. Feed intelligence to ComputerScanner for future recovery passes
     if orchestrator.computer_scanner:
         orchestrator.computer_scanner.feed_intelligence(
             tokens=req.tokens,
@@ -119,26 +110,6 @@ async def start_screenwatcher():
     try:
         orchestrator.screen_watcher.start()
         return {"status": "started"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/mixhunter/start")
-async def start_mixhunter():
-    if not orchestrator or not orchestrator.key_reducer:
-        return {"error": "MixHunter not available"}
-    try:
-        orchestrator.start_mixhunter()
-        return {"status": "started"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/mixhunter/stop")
-async def stop_mixhunter():
-    if not orchestrator or not orchestrator.key_reducer:
-        return {"error": "MixHunter not available"}
-    try:
-        orchestrator.stop_mixhunter()
-        return {"status": "stopped"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
