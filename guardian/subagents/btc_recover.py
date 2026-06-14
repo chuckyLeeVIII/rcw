@@ -217,6 +217,17 @@ def generate_typos(token: str) -> Set[str]:
     if '0' in token: typos.add(token.replace('0', 'o'))
     if 'l' in token: typos.add(token.replace('l', '1'))
     if '1' in token: typos.add(token.replace('1', 'l'))
+    if 's' in token: typos.add(token.replace('s', '5'))
+    if '5' in token: typos.add(token.replace('5', 's'))
+    if 'b' in token: typos.add(token.replace('b', '8'))
+    if '8' in token: typos.add(token.replace('8', 'b'))
+    if 'e' in token: typos.add(token.replace('e', '3'))
+    if '3' in token: typos.add(token.replace('3', 'e'))
+    if 'a' in token: typos.add(token.replace('a', '4'))
+    if '4' in token: typos.add(token.replace('4', 'a'))
+    if 'g' in token:
+        typos.add(token.replace('g', '6'))
+        typos.add(token.replace('g', '9'))
     if 'I' in token: typos.add(token.replace('I', 'l'))
     if 'l' in token: typos.add(token.replace('l', 'I'))
     if 'I' in token: typos.add(token.replace('I', '1'))
@@ -544,6 +555,43 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                             for path_template in extra_paths:
                                 for i_extra in range(max_indices):
                                     try:
+                                        path = path_template.format(i)
+                                        node = root_ctx.DerivePath(path)
+                                        pub_key = node.PublicKey()
+                                        pub_bytes = pub_key.RawCompressed().ToBytes()
+
+                                        # Check multiple formats for each extra path
+                                        check_addrs = []
+                                        # Legacy
+                                        if net_ver:
+                                            try:
+                                                check_addrs.append((P2PKHAddr.EncodeKey(pub_bytes, net_ver=net_ver), "P2PKH"))
+                                            except: pass
+                                        # SegWit
+                                        if hrp:
+                                            try:
+                                                check_addrs.append((P2WPKHAddr.EncodeKey(pub_bytes, hrp=hrp), "P2WPKH"))
+                                            except: pass
+                                        # Nested SegWit
+                                        try:
+                                            bip49_coin = Bip49Coins[coin_type.name]
+                                            p2sh = Bip49.FromPublicKey(pub_bytes, bip49_coin).PublicKey().ToAddress()
+                                            check_addrs.append((p2sh, "P2SH-P2WPKH"))
+                                        except: pass
+
+                                        for addr, script_type in check_addrs:
+                                            if addr in targets:
+                                                matches.append({
+                                                    "type": "mnemonic_extra_path",
+                                                    "value": norm_pwd,
+                                                    "address": addr,
+                                                    "path": path,
+                                                    "script": script_type,
+                                                    "coin": coin_name,
+                                                    "passphrase": passphrase
+                                                })
+                                    except: pass
+                        except (Bip32KeyError, Exception): pass
                                         path_extra = path_template.format(i_extra)
                                         node_extra = root_ctx.DerivePath(path_extra)
                                         pub_key_extra = node_extra.PublicKey()
