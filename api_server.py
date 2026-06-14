@@ -120,6 +120,26 @@ async def start_screenwatcher():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+@app.post("/api/mixhunter/start")
+async def start_mixhunter():
+    if not orchestrator or not orchestrator.key_reducer:
+        return {"error": "MixHunter not available"}
+    try:
+        orchestrator.start_mixhunter()
+        return {"status": "started"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/mixhunter/stop")
+async def stop_mixhunter():
+    if not orchestrator or not orchestrator.key_reducer:
+        return {"error": "MixHunter not available"}
+    try:
+        orchestrator.stop_mixhunter()
+        return {"status": "stopped"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @app.post("/api/screenwatcher/stop")
 async def stop_screenwatcher():
     if not orchestrator or not orchestrator.screen_watcher:

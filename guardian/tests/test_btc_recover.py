@@ -121,6 +121,39 @@ def test_generate_typos_visual_and_kb():
     typos_w = generate_typos(token_w)
     assert "avvard" in typos_w # w->vv
 
+def test_exhaustive_extra_paths():
+    """Verify extra path derivation in exhaustive mode"""
+    # Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+    mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    # Electrum Standard m/0/0 for 'abandon...' -> 18rXkXz8B8Z5D9v3T7G3Q7Z8Z5D9v3T7G3
+    # Actually let's use a real one from Electrum:
+    # m/0/0 -> 1JQH7moZMR4o3Yv4YmsmZ7SST7Nf6Gxy6a (Wait, that's BIP44)
+    # Let's derive one manually or use one from a known tool.
+    # BIP-32 Legacy m/0/0 -> 16u7yYv6C9YQz3z8rXkXz8B8Z5D9v3T7G3
+
+    # We'll target the P2PKH address for m/0/0
+    from bip_utils import Bip39SeedGenerator, Bip32Secp256k1, P2PKHAddr, Bip44ConfGetter, Bip44Coins
+    seed = Bip39SeedGenerator(mnemonic).Generate()
+    pub_bytes = Bip32Secp256k1.FromSeed(seed).DerivePath("m/0/0").PublicKey().RawCompressed().ToBytes()
+    net_ver = Bip44ConfGetter.GetConfig(Bip44Coins.BITCOIN).AddrParams().get('net_ver')
+    target_addr = P2PKHAddr.EncodeKey(pub_bytes, net_ver=net_ver)
+
+    targets = {target_addr}
+    res = check_candidate(mnemonic, targets, exhaustive=True)
+
+    assert any(m['address'] == target_addr and m['type'] == 'mnemonic_extra_path' for m in res)
+
+def test_generate_typos_v5():
+    """Verify new v5.0 typo substitutions"""
+    token = "light"
+    typos = generate_typos(token)
+    assert "1ight" in typos # l -> 1
+    assert "iight" in typos # l -> i
+
+    token2 = "queen"
+    typos2 = generate_typos(token2)
+    assert "9ueen" in typos2 # q -> 9
+
 def test_check_candidate_multi_coin():
     """Verify multi-coin support in exhaustive mode"""
     mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
