@@ -187,7 +187,7 @@ export function RecoveryAIAssistant() {
         .filter(t => t.length > 0);
 
       // Extract all addresses from session
-      const addressRegex = /(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})/g;
+      const addressRegex = /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[ac-hj-np-z02-9]{8,87})\b/g;
       const sessionAddresses = messages
         .filter(m => m.type === 'user')
         .flatMap(m => m.text.match(addressRegex) || []);
