@@ -148,13 +148,15 @@ def generate_typos(token: str) -> Set[str]:
             c3[i], c3[i+2] = c3[i+2], c3[i]
             typos.add("".join(c3))
 
-    # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools v2)
+    # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools Engine v5.0)
     subs_list = [
         {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
          'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
          'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
         {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n',
-         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y', 'l': 'i', 'i': 'l'}
+         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y', 'l': 'i', 'i': 'l'},
+        {'o': '0', '0': 'o', 'i': 'l', 'l': 'i', 'i': '1', '1': 'i', 'l': '1', '1': 'l', 's': '5', '5': 's', 'b': '8', '8': 'b',
+         'e': '3', '3': 'e', 'a': '4', '4': 'a', 'g': '6', '6': 'g', 'q': '9', '9': 'q'}
     ]
 
     keyboard_adj = {
@@ -286,8 +288,8 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                     (Bip44, Bip44Coins.DOGECOIN), (Bip44, Bip44Coins.DASH), (Bip44, Bip44Coins.BITCOIN_CASH)
                 ])
 
-            max_accounts = 10 if exhaustive else 1
-            max_indices = 150 if exhaustive else 20
+            max_accounts = 25 if exhaustive else 1
+            max_indices = 1000 if exhaustive else 20
 
             for coin_cls, coin_type in btc_variants:
                 try:
@@ -381,28 +383,48 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                         "m/0'/0/{}",
                     ]
 
-                    for coin_type, coin_name in extra_coins:
+                    for coin_type_extra, coin_name_extra in extra_coins:
                         try:
-                            conf = Bip44ConfGetter.GetConfig(coin_type)
-                            net_ver = conf.AddrParams().get('net_ver')
+                            conf_extra = Bip44ConfGetter.GetConfig(coin_type_extra)
+                            net_ver_extra = conf_extra.AddrParams().get('net_ver')
                             try:
-                                hrp = Bip84ConfGetter.GetConfig(coin_type).AddrParams().get('hrp')
-                            except: hrp = None
+                                hrp_extra = Bip84ConfGetter.GetConfig(coin_type_extra).AddrParams().get('hrp')
+                            except: hrp_extra = None
 
                             for path_template in extra_paths:
-                                for i in range(max_indices):
+                                for i_extra in range(max_indices):
                                     try:
-                                        bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, Bip49Coins.BITCOIN)
-                                        addr_p2sh = bip49_ctx.PublicKey().ToAddress()
-                                        if addr_p2sh in targets:
-                                            matches.append({
-                                                "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2sh,
-                                                "path": path, "script": "P2SH-P2WPKH", "passphrase": passphrase
-                                            })
-                                    except: pass
-                                except: pass
+                                        path_extra = path_template.format(i_extra)
+                                        node_extra = root_ctx.DerivePath(path_extra)
+                                        pub_key_extra = node_extra.PublicKey()
+                                        pub_bytes_extra = pub_key_extra.RawCompressed().ToBytes()
 
-                            except (Bip32KeyError, Exception): pass
+                                        # Check multiple formats for each extra path
+                                        check_addrs = []
+                                        # 1. P2PKH
+                                        if net_ver_extra:
+                                            try:
+                                                check_addrs.append((P2PKHAddr.EncodeKey(pub_bytes_extra, net_ver=net_ver_extra), "P2PKH"))
+                                            except: pass
+                                        # 2. P2WPKH
+                                        if hrp_extra:
+                                            try:
+                                                check_addrs.append((P2WPKHAddr.EncodeKey(pub_bytes_extra, hrp=hrp_extra), "P2WPKH"))
+                                            except: pass
+                                        # 3. P2SH-P2WPKH
+                                        try:
+                                            addr_p2sh_extra = Bip49.FromPublicKey(pub_bytes_extra, coin_type_extra).PublicKey().ToAddress()
+                                            check_addrs.append((addr_p2sh_extra, "P2SH-P2WPKH"))
+                                        except: pass
+
+                                        for addr, fmt in check_addrs:
+                                            if addr in targets:
+                                                matches.append({
+                                                    "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr,
+                                                    "path": path_extra, "format": fmt, "coin": coin_name_extra, "passphrase": passphrase
+                                                })
+                                    except Exception: pass
+                        except Exception: pass
                 except Exception: pass
         except Exception: pass
 

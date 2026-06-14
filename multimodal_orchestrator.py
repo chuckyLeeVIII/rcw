@@ -544,7 +544,10 @@ class MultimodalOrchestrator:
             'vault_stats': self.vault.get_stats(),
             'agents': {
                 'key_reducer': {'running': self.key_reducer.is_running if self.key_reducer else False},
+                'mixhunter': {'running': self.key_reducer.is_running if self.key_reducer else False},
                 'screen_watcher': {'running': self.screen_watcher.is_running if self.screen_watcher else False},
+                'computer_scanner': {'running': self.computer_scanner.is_running if self.computer_scanner else False},
+                'scanner': {'running': self.computer_scanner.is_running if self.computer_scanner else False},
             }
         }
         
@@ -557,6 +560,8 @@ class MultimodalOrchestrator:
                 'artifacts_found': cs_stats.get('artifacts_found', 0),
                 'keys_extracted': cs_stats.get('keys_extracted', 0),
                 'richlist_hits': cs_stats.get('richlist_hits', 0),
+                'recovery_attempts': cs_stats.get('recovery_attempts', 0),
+                'recovery_matches': cs_stats.get('recovery_matches', 0),
             }
         
         return status
