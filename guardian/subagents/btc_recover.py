@@ -563,7 +563,7 @@ def run_btcrecover_scan(
         passphrases = [""]
         if exhaustive:
             # Add top 20 candidates as potential passphrases to avoid explosion but catch common ones
-            passphrases.extend(list(candidates)[:20])
+            passphrases.extend(sorted(candidates)[:20])
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
             all_futures = []
