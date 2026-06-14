@@ -29,6 +29,7 @@ class ScanRequest(BaseModel):
 class FeedRequest(BaseModel):
     tokens: Optional[List[str]] = None
     addresses: Optional[List[str]] = None
+    deep_scan: Optional[bool] = None
 
 @app.get("/api/status")
 async def get_status():
@@ -56,7 +57,9 @@ async def start_scan(req: ScanRequest):
             addrs = [a.strip() for a in req.richlist.split(',') if a.strip()]
             valid_addrs = [a for a in addrs if len(a) >= 26]
             if valid_addrs:
-                orchestrator.computer_scanner.add_to_richlist(valid_addrs)
+                # If only one, pass as string for backward compatibility, else list
+                to_add = valid_addrs[0] if len(valid_addrs) == 1 else valid_addrs
+                orchestrator.computer_scanner.add_to_richlist(to_add)
 
     orchestrator.computer_scanner.start(num_workers=req.workers)
     return {"status": "started", "paths": req.paths}
@@ -86,10 +89,16 @@ async def feed_assistant_intelligence(req: FeedRequest):
     if orchestrator.computer_scanner:
         orchestrator.computer_scanner.feed_intelligence(
             tokens=req.tokens,
-            addresses=req.addresses
+            addresses=req.addresses,
+            deep_scan=req.deep_scan
         )
 
-    return {"status": "intelligence_ingested", "tokens": len(req.tokens or []), "addresses": len(req.addresses or [])}
+    return {
+        "status": "intelligence_ingested",
+        "tokens": len(req.tokens or []),
+        "addresses": len(req.addresses or []),
+        "deep_scan": req.deep_scan if req.deep_scan is not None else (orchestrator.computer_scanner.deep_scan if orchestrator.computer_scanner else False)
+    }
 
 @app.post("/api/screenwatcher/snapshot")
 async def screenwatcher_snapshot():
@@ -138,4 +147,3 @@ async def get_prices():
     if not orchestrator:
         return {"error": "Orchestrator not initialized"}
     return orchestrator._get_live_prices()
-
