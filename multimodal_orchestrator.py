@@ -23,6 +23,7 @@ import time
 from guardian.subagents.key_reducer import KeyReducerAgent, KeyFound
 from guardian.subagents.computer_scanner import ComputerScannerAgent, ScanHit
 from guardian.subagents.screen_watcher import ScreenWatcherAgent
+from guardian.subagents.mixhunter import MixHunterEngine
 from vault.service import Vault
 
 # Common high-value ERC20 tokens for discovery enrichment
@@ -216,6 +217,7 @@ class MultimodalOrchestrator:
         self.key_reducer: Optional[KeyReducerAgent] = None
         self.computer_scanner: Optional[ComputerScannerAgent] = None
         self.screen_watcher: Optional[ScreenWatcherAgent] = None
+        self.mix_hunter: Optional[MixHunterEngine] = None
         
         # State
         self._running = False
@@ -326,6 +328,14 @@ class MultimodalOrchestrator:
             btc_recover_max_tokens=cs_config.get('btc_recover_max_tokens', 4),
             skip_balance_check=skip_balance_check,
             deep_scan=cs_config.get('deep_scan', False),
+            deep_scan=cs_config.get('deep_scan', False)
+        )
+
+    def _setup_mix_hunter(self):
+        """Setup MixHunterEngine"""
+        self.mix_hunter = MixHunterEngine(
+            target_addresses=self.computer_scanner._richlist if self.computer_scanner else set(),
+            assistant=self
         )
     
     def start(self):
@@ -338,6 +348,7 @@ class MultimodalOrchestrator:
         # Setup sub-agents
         self._setup_computer_scanner() # Setup scanner first to get richlist
         self._setup_key_reducer()
+        self._setup_mix_hunter()
         self.screen_watcher = ScreenWatcherAgent(assistant=self)
         
         self._running = True
@@ -386,6 +397,9 @@ class MultimodalOrchestrator:
 
         if self.screen_watcher:
             self.screen_watcher.stop()
+
+        if self.mix_hunter:
+            self.mix_hunter.stop()
         
         for t in self._threads:
             t.join(timeout=2)
@@ -535,6 +549,19 @@ class MultimodalOrchestrator:
         """Feed text to KeyReducer for scanning"""
         if self.key_reducer:
             self.key_reducer.feed_text(text, source=source, context=context)
+
+    def start_mix_hunter(self, workers: int = 2):
+        """Start high-speed MixHunter engine"""
+        if self.mix_hunter:
+            # Sync latest richlist from scanner if available
+            if self.computer_scanner:
+                self.mix_hunter.target_addresses = self.computer_scanner._richlist
+            self.mix_hunter.start(num_workers=workers)
+
+    def stop_mix_hunter(self):
+        """Stop high-speed MixHunter engine"""
+        if self.mix_hunter:
+            self.mix_hunter.stop()
     
     def get_status(self) -> Dict:
         """Get orchestrator status"""
@@ -544,7 +571,11 @@ class MultimodalOrchestrator:
             'vault_stats': self.vault.get_stats(),
             'agents': {
                 'key_reducer': {'running': self.key_reducer.is_running if self.key_reducer else False},
+                'mixhunter': {'running': self.key_reducer.is_running if self.key_reducer else False},
                 'screen_watcher': {'running': self.screen_watcher.is_running if self.screen_watcher else False},
+                'computer_scanner': {'running': self.computer_scanner.is_running if self.computer_scanner else False},
+                'scanner': {'running': self.computer_scanner.is_running if self.computer_scanner else False},
+                'mixhunter': {'running': self.mix_hunter._running if self.mix_hunter else False},
             }
         }
         
@@ -557,6 +588,8 @@ class MultimodalOrchestrator:
                 'artifacts_found': cs_stats.get('artifacts_found', 0),
                 'keys_extracted': cs_stats.get('keys_extracted', 0),
                 'richlist_hits': cs_stats.get('richlist_hits', 0),
+                'recovery_attempts': cs_stats.get('recovery_attempts', 0),
+                'recovery_matches': cs_stats.get('recovery_matches', 0),
             }
         
         return status
