@@ -125,7 +125,7 @@ async def start_mixhunter():
     if not orchestrator or not orchestrator.key_reducer:
         return {"error": "MixHunter not available"}
     try:
-        orchestrator.key_reducer.start()
+        orchestrator.start_mixhunter()
         return {"status": "started"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -135,7 +135,7 @@ async def stop_mixhunter():
     if not orchestrator or not orchestrator.key_reducer:
         return {"error": "MixHunter not available"}
     try:
-        orchestrator.key_reducer.stop()
+        orchestrator.stop_mixhunter()
         return {"status": "stopped"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
