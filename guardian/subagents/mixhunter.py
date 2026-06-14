@@ -29,7 +29,7 @@ class MixHunterEngine:
             self.stats["generated"] += 1
 
             if self.assistant:
-                # Feed to KeyReducer for check
+                # [DeepTools Engine] Feed to KeyReducer for exhaustive filtering
                 self.assistant.feed_text(key, source="mixhunter")
 
             time.sleep(0.001) # Yield
