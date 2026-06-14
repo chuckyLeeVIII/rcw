@@ -54,6 +54,8 @@ async def start_scan(req: ScanRequest):
             orchestrator.computer_scanner._load_richlist()
         else:
             # Handle comma-separated addresses or single address
+            if len(req.richlist) >= 26:
+                orchestrator.computer_scanner.add_to_richlist(req.richlist)
             addrs = [a.strip() for a in req.richlist.split(',') if a.strip()]
             valid_addrs = [a for a in addrs if len(a) >= 26]
             if valid_addrs:

