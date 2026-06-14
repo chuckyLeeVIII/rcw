@@ -209,7 +209,10 @@ class ComputerScannerAgent:
             self._richlist.add(address)
             print(f"[ComputerScanner] Added {address} to active richlist. Total: {len(self._richlist)}")
 
-    def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None, deep_scan: Optional[bool] = None):
+        if address and self.is_running:
+            self._recovery_event.set()
+
+    def feed_intelligence(self, tokens: List[str] = None, addresses: List[str] = None):
         """Dynamic intelligence feeding from AI Assistant"""
         if deep_scan is not None:
             self.deep_scan = deep_scan
@@ -232,16 +235,25 @@ class ComputerScannerAgent:
 
     def _recovery_loop(self):
         """Background loop for exhaustive recovery passes triggered by intelligence updates"""
+        processed_states = set()
+
         while self.is_running:
             if self._recovery_event.wait(timeout=5):
                 self._recovery_event.clear()
                 if not self.is_running: break
 
                 with self._recovery_lock:
-                    engine_name = "DeepTools Engine" if self.deep_scan else "Standard Recovery"
-                    print(f"[ComputerScanner] [{engine_name}] Starting recovery scan with {len(self.btc_recover_tokens)} tokens...")
+                    # Deduplicate scan states to avoid redundant heavy processing
+                    state_hash = hash((tuple(sorted(self.btc_recover_tokens)), tuple(sorted(list(self._richlist))), self.deep_scan))
+                    if state_hash in processed_states:
+                        continue
+                    processed_states.add(state_hash)
 
-                    # Run exhaustive engine
+                    engine_name = "DeepTools Engine" if self.deep_scan else "Standard Recovery"
+                    print(f"[ComputerScanner] [{engine_name}] Starting exhaustive recovery scan...")
+                    print(f"[ComputerScanner] Intelligence: {len(self.btc_recover_tokens)} tokens, {len(self._richlist)} targets")
+
+                    # Run exhaustive engine with maximum parallelism
                     results = run_btcrecover_scan(
                         tokenlist=self.btc_recover_tokens,
                         target_addresses=list(self._richlist),
@@ -252,17 +264,23 @@ class ComputerScannerAgent:
                     self.stats["recovery_attempts"] += results["attempts"]
 
                     if results["found"]:
-                        self.stats["recovery_matches"] += len(results["matches"])
+                        new_matches = 0
                         for match in results["matches"]:
-                            self._hit_queue.put(ScanHit(
-                                artifact_type="Recovery Engine Match",
-                                path="Intelligence-Feed",
-                                addresses={match.get('coin', 'btc').lower(): match['address']},
-                                balances={},
-                                metadata=match,
-                                timestamp=datetime.now(timezone.utc)
-                            ))
-                            print(f"[ComputerScanner] RECOVERY SUCCESS: {match['address']} found!")
+                            addr = match['address']
+                            # Explicitly verify hit against active richlist
+                            if addr in self._richlist:
+                                self._hit_queue.put(ScanHit(
+                                    artifact_type=f"Recovery Match ({match.get('type', 'unknown')})",
+                                    path="DeepTools-Engine",
+                                    addresses={match.get('coin', 'btc').lower(): addr},
+                                    balances={},
+                                    metadata=match,
+                                    timestamp=datetime.now(timezone.utc)
+                                ))
+                                new_matches += 1
+                                print(f"[ComputerScanner] [HIT] DeepTools found {match.get('coin', 'btc')} match: {addr}")
+
+                        self.stats["recovery_matches"] += new_matches
 
     def _run_scan(self):
         print(f"[ComputerScanner] Starting filesystem scan. Deep scan: {self.deep_scan}")
@@ -360,3 +378,38 @@ class ComputerScannerAgent:
         while self.is_running or not self._hit_queue.empty():
             try: yield self._hit_queue.get(timeout=1)
             except queue.Empty: continue
+
+    def _recovery_loop(self):
+        """Background loop for exhaustive recovery scans"""
+        print("[ComputerScanner] Recovery engine loop started")
+        while self.is_running:
+            if self._recovery_event.wait(timeout=1):
+                self._recovery_event.clear()
+                if not self.is_running: break
+
+                with self._recovery_lock:
+                    tokens = list(self.btc_recover_tokens)
+                    targets = list(self._richlist)
+
+                    print(f"[ComputerScanner] Triggering exhaustive recovery scan with {len(tokens)} tokens and {len(targets)} targets...")
+
+                    results = run_btcrecover_scan(
+                        tokenlist=tokens,
+                        target_addresses=targets,
+                        exhaustive=True,
+                        workers=os.cpu_count() or 4
+                    )
+
+                    self.stats["recovery_attempts"] += results.get("attempts", 0)
+
+                    if results.get("found"):
+                        for match in results.get("matches", []):
+                            self.stats["recovery_matches"] += 1
+                            self._hit_queue.put(ScanHit(
+                                artifact_type=f"Recovery Match ({match.get('type')})",
+                                path=match.get('path', 'RECOVERY_ENGINE'),
+                                addresses={match.get('coin', 'btc').lower(): match.get('address')},
+                                balances={}, # Orchestrator will fill this
+                                metadata=match,
+                                timestamp=datetime.now(timezone.utc)
+                            ))
