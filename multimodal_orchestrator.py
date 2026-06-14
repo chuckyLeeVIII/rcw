@@ -586,8 +586,9 @@ class MultimodalOrchestrator:
 
     def start_mix_hunter(self, workers: int = 2):
         """Initialize and start the high-speed hunting engine"""
-        if not self.mix_hunter:
-            self.mix_hunter = MixHunterEngine(assistant=self)
+        self.stop_mix_hunter()
+
+        self.mix_hunter = MixHunterEngine(assistant=self)
 
         # Sync richlist from computer scanner
         if self.computer_scanner:
