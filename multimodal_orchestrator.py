@@ -17,8 +17,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import requests
 from concurrent.futures import ThreadPoolExecutor
-import threading
-import time
 
 from guardian.subagents.key_reducer import KeyReducerAgent, KeyFound
 from guardian.subagents.computer_scanner import ComputerScannerAgent, ScanHit
@@ -78,7 +76,6 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
     results = {"balance": 0.0, "unconfirmed": 0.0, "tx_count": 0, "rewards": 0.0, "tokens": {}}
     try:
         chain_lower = chain.lower()
-        # Support for 8 chains (BTC, tBTC, LTC, DOGE, DASH, ETH, ETC, BCH)
         if any(c in chain_lower for c in ("btc", "bitcoin", "tbtc", "ltc", "doge", "dash", "bch", "etc")):
             if "btc" in chain_lower or "bitcoin" in chain_lower:
                 if "tbtc" in chain_lower:
@@ -88,7 +85,6 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
             elif chain_lower == "tbtc":
                 url = f"https://blockstream.info/testnet/api/address/{address}"
             else:
-                # Use Blockchair for alt-chains
                 coin_map = {"ltc": "litecoin", "doge": "dogecoin", "dash": "dash", "bch": "bitcoin-cash", "bitcoin-cash": "bitcoin-cash"}
                 coin = coin_map.get(chain_lower, "bitcoin")
                 url = f"https://api.blockchair.com/{coin}/dashboards/address/{address}"
@@ -108,7 +104,6 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
                     results["tx_count"] = addr_data.get('transaction_count', 0)
 
         elif chain_lower in ("eth", "ethereum", "etc"):
-            # Rotate through RPC providers
             rpc_url = get_next_eth_rpc() if chain_lower != "etc" else "https://ethereumclassic.network"
             resp = _rate_limited_request(
                 rpc_url,
@@ -120,7 +115,6 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
                 if 'result' in res_data:
                     results["balance"] = int(res_data['result'], 16) / 1e18
             
-            # Check transaction count (History)
             resp_tx = _rate_limited_request(
                 rpc_url,
                 json={"jsonrpc":"2.0","method":"eth_getTransactionCount","params":[address, "latest"],"id":1},
@@ -131,38 +125,29 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
                 if 'result' in res_tx:
                     results["tx_count"] = int(res_tx['result'], 16)
 
-            # Refactor: Use Etherscan API for unconfirmed incoming and rewards (internal txs)
             if chain_lower in ("eth", "ethereum"):
                 api_key = os.environ.get("ETHERSCAN_API_KEY", "demo")
-                
-                # Check Normal Transactions for unconfirmed incoming (confirmations=0)
                 tx_url = f"https://api.etherscan.io/api?module=account&action=txlist&address={address}&startblock=0&endblock=99999999&sort=desc&apikey={api_key}"
                 resp_tx = _rate_limited_request(tx_url, timeout=5)
                 if resp_tx and resp_tx.status_code == 200:
                     data = resp_tx.json()
                     if data.get("status") == "1" and isinstance(data.get("result"), list):
                         tx_list = data["result"]
-                        # Refresh tx_count with more precise data from history
                         results["tx_count"] = max(results["tx_count"], len(tx_list))
-                        # Scan for incoming with 0 confirmations (pending inclusion)
                         for tx in tx_list[:20]:
                             if tx.get("to", "").lower() == address.lower() and tx.get("confirmations") == "0":
                                 results["unconfirmed"] += int(tx.get("value", 0)) / 1e18
 
-                # Check Internal Transactions for owed rewards/claimables
                 internal_url = f"https://api.etherscan.io/api?module=account&action=txlistinternal&address={address}&startblock=0&endblock=99999999&sort=desc&apikey={api_key}"
                 resp_int = _rate_limited_request(internal_url, timeout=5)
                 if resp_int and resp_int.status_code == 200:
                     data = resp_int.json()
                     if data.get("status") == "1" and isinstance(data.get("result"), list):
-                        # Internal incoming often represents reward payouts from protocols
                         for itx in data["result"]:
                             if itx.get("to", "").lower() == address.lower():
                                 results["rewards"] += int(itx.get("value", 0)) / 1e18
 
-                # Check for common ERC20 tokens on Ethereum Mainnet
                 for symbol, contract in COMMON_ERC20.items():
-                    # balanceOf selector: 70a08231
                     call_data = f"0x70a08231000000000000000000000000{address[2:].lower()}"
                     resp_token = _rate_limited_request(
                         rpc_url,
@@ -175,7 +160,6 @@ def quick_check_balance(address: str, chain: str) -> Dict[str, Any]:
                             try:
                                 val = int(res_token['result'], 16)
                                 if val > 0:
-                                    # Decimals: USDT/USDC (6), DAI/LINK (18)
                                     div = 1e6 if symbol in ("USDT", "USDC") else 1e18
                                     results["tokens"][symbol] = val / div
                             except: pass
@@ -244,10 +228,7 @@ class MultimodalOrchestrator:
             if now - self._last_price_fetch < 300 and self._price_cache:
                 return self._price_cache
 
-            # Try Primary: CoinGecko
             prices = self._fetch_coingecko_prices()
-            
-            # Fallback: CryptoCompare
             if not prices:
                 print("[Orchestrator] CoinGecko failed/limited, trying CryptoCompare fallback...")
                 prices = self._fetch_cryptocompare_prices()
@@ -292,10 +273,7 @@ class MultimodalOrchestrator:
     def _setup_key_reducer(self):
         """Setup KeyReducerAgent from config"""
         kr_config = self.config.get('key_reducer', {})
-        
-        richlist = set()
-        if self.computer_scanner:
-            richlist = self.computer_scanner._richlist
+        richlist = self.computer_scanner._richlist if self.computer_scanner else set()
 
         self.key_reducer = KeyReducerAgent(
             balance_checkers=self.config.get('balance_checkers', {}),
@@ -328,8 +306,6 @@ class MultimodalOrchestrator:
             btc_recover_max_tokens=cs_config.get('btc_recover_max_tokens', 4),
             skip_balance_check=skip_balance_check,
             deep_scan=cs_config.get('deep_scan', False)
-            deep_scan=cs_config.get('deep_scan', False),
-            deep_scan=cs_config.get('deep_scan', False)
         )
 
     def _setup_mix_hunter(self):
@@ -347,7 +323,7 @@ class MultimodalOrchestrator:
         print("[Orchestrator] Starting all sub-agents...")
         
         # Setup sub-agents
-        self._setup_computer_scanner() # Setup scanner first to get richlist
+        self._setup_computer_scanner()
         self._setup_key_reducer()
         self._setup_mix_hunter()
         self.screen_watcher = ScreenWatcherAgent(assistant=self)
@@ -355,29 +331,21 @@ class MultimodalOrchestrator:
         self._running = True
         self._stats['start_time'] = time.time()
         
-        # Start KeyReducer
         if self.key_reducer:
             self.key_reducer.start(num_workers=4)
-            
-            # Start KeyReducer hit consumer
             t = threading.Thread(target=self._consume_key_reducer_hits, daemon=True)
             t.start()
             self._threads.append(t)
 
-        # Start ScreenWatcher
         if self.screen_watcher:
             self.screen_watcher.start()
         
-        # Start ComputerScanner (idle until explicitly started via API/CLI)
         if self.computer_scanner:
-            # AUTO-START PRIORITY SCAN
             self.computer_scanner.start(num_workers=1)
-
             t = threading.Thread(target=self._consume_computer_scanner_hits, daemon=True)
             t.start()
             self._threads.append(t)
         
-        # Start event processor
         t = threading.Thread(target=self._process_events, daemon=True)
         t.start()
         self._threads.append(t)
@@ -387,20 +355,12 @@ class MultimodalOrchestrator:
     def stop(self):
         """Stop all sub-agents"""
         print("[Orchestrator] Stopping all sub-agents...")
-        
         self._running = False
         
-        if self.key_reducer:
-            self.key_reducer.stop()
-        
-        if self.computer_scanner:
-            self.computer_scanner.stop()
-
-        if self.screen_watcher:
-            self.screen_watcher.stop()
-
-        if self.mix_hunter:
-            self.mix_hunter.stop()
+        if self.key_reducer: self.key_reducer.stop()
+        if self.computer_scanner: self.computer_scanner.stop()
+        if self.screen_watcher: self.screen_watcher.stop()
+        if self.mix_hunter: self.mix_hunter.stop()
         
         for t in self._threads:
             t.join(timeout=2)
@@ -410,12 +370,9 @@ class MultimodalOrchestrator:
     
     def _consume_key_reducer_hits(self):
         """Consume hits from KeyReducer"""
-        if not self.key_reducer:
-            return
-        
+        if not self.key_reducer: return
         for key_found in self.key_reducer.found_keys():
-            if not self._running:
-                break
+            if not self._running: break
             
             event_data = {
                 'key_type': key_found.key_type,
@@ -428,8 +385,7 @@ class MultimodalOrchestrator:
 
             with self._hits_lock:
                 self.discovered_hits.append(event_data)
-                if len(self.discovered_hits) > 1000:
-                    self.discovered_hits.pop(0)
+                if len(self.discovered_hits) > 1000: self.discovered_hits.pop(0)
 
             event = OrchestratorEvent(
                 event_type="key_reducer:found",
@@ -437,19 +393,13 @@ class MultimodalOrchestrator:
                 data=event_data,
                 timestamp=datetime.now(timezone.utc),
             )
-            
             self._event_queue.put_nowait(event)
     
     def _consume_computer_scanner_hits(self):
         """Consume hits from ComputerScanner"""
-        if not self.computer_scanner:
-            return
-        
+        if not self.computer_scanner: return
         for hit in self.computer_scanner.hits():
-            if not self._running:
-                break
-            
-            # Offload balance check to thread pool
+            if not self._running: break
             self._balance_executor.submit(self._process_hit_async, hit)
 
     def _process_hit_async(self, hit: ScanHit):
@@ -463,7 +413,6 @@ class MultimodalOrchestrator:
 
         for chain, addr in hit.addresses.items():
             check = quick_check_balance(addr, chain)
-            # Include internal rewards and unconfirmed funds in the reporting balance
             balances[chain] = check["balance"] + check.get("unconfirmed", 0.0) + check.get("rewards", 0.0)
             tx_counts[chain] = check["tx_count"]
             all_rewards[chain] = check.get("rewards", 0.0)
@@ -471,14 +420,11 @@ class MultimodalOrchestrator:
             
             chain_key = chain.lower()
             price = prices.get(chain_key, 0.0)
-            # Fallback for naming variations
             if not price:
                 if "bitcoin" in chain_key: price = prices.get("btc", 0.0)
                 elif "ethereum" in chain_key: price = prices.get("eth", 0.0)
             
             total_usd += balances.get(chain, 0.0) * price
-            
-            # Add token value to USD total (assume stables ~$1, LINK ~$18)
             for t_sym, t_amount in all_tokens[chain].items():
                 total_usd += t_amount * (18.0 if t_sym == "LINK" else 1.0)
 
@@ -497,8 +443,7 @@ class MultimodalOrchestrator:
 
         with self._hits_lock:
             self.discovered_hits.append(event_data)
-            if len(self.discovered_hits) > 1000:
-                self.discovered_hits.pop(0)
+            if len(self.discovered_hits) > 1000: self.discovered_hits.pop(0)
 
         event = OrchestratorEvent(
             event_type="computer_scan:found",
@@ -513,32 +458,22 @@ class MultimodalOrchestrator:
         while self._running:
             try:
                 event = self._event_queue.get(timeout=1)
-                
-                # Update stats
                 self._stats['events_processed'] += 1
                 
                 if 'found' in event.event_type:
                     self._stats['keys_found'] += 1
-                    total_usd = event.data.get('balance_usd', 0) or event.data.get('total_usd', 0)
+                    total_usd = event.data.get('total_usd', 0)
                     self._stats['total_value_usd'] += total_usd
                 
-                # Call registered handlers
                 handlers = self._event_handlers.get(event.event_type, [])
                 for handler in handlers:
-                    try:
-                        handler(event)
-                    except Exception as e:
-                        print(f"[Orchestrator] Handler error: {e}")
+                    try: handler(event)
+                    except Exception: pass
                 
-                # Call assistant callback (safe data only)
                 if self.assistant_callback:
-                    try:
-                        self.assistant_callback(event)
-                    except Exception as e:
-                        print(f"[Orchestrator] Assistant callback error: {e}")
-                
-            except queue.Empty:
-                continue
+                    try: self.assistant_callback(event)
+                    except Exception: pass
+            except queue.Empty: continue
     
     def on_event(self, event_type: str, handler: Callable):
         """Register event handler"""
@@ -554,15 +489,13 @@ class MultimodalOrchestrator:
     def start_mix_hunter(self, workers: int = 2):
         """Start high-speed MixHunter engine"""
         if self.mix_hunter:
-            # Sync latest richlist from scanner if available
             if self.computer_scanner:
                 self.mix_hunter.target_addresses = self.computer_scanner._richlist
             self.mix_hunter.start(num_workers=workers)
 
     def stop_mix_hunter(self):
         """Stop high-speed MixHunter engine"""
-        if self.mix_hunter:
-            self.mix_hunter.stop()
+        if self.mix_hunter: self.mix_hunter.stop()
     
     def get_status(self) -> Dict:
         """Get orchestrator status"""
@@ -572,7 +505,6 @@ class MultimodalOrchestrator:
             'vault_stats': self.vault.get_stats(),
             'agents': {
                 'key_reducer': {'running': self.key_reducer.is_running if self.key_reducer else False},
-                'mixhunter': {'running': self.key_reducer.is_running if self.key_reducer else False},
                 'screen_watcher': {'running': self.screen_watcher.is_running if self.screen_watcher else False},
                 'computer_scanner': {'running': self.computer_scanner.is_running if self.computer_scanner else False},
                 'scanner': {'running': self.computer_scanner.is_running if self.computer_scanner else False},
@@ -599,15 +531,14 @@ class MultimodalOrchestrator:
         """Get recent hits with thread safety"""
         with self._hits_lock:
             hits = list(self.discovered_hits)
-            if limit > 0:
-                hits = hits[-limit:]
+            if limit > 0: hits = hits[-limit:]
             return hits
 
     def receive_event(self, event_type: str, data: Dict):
-        """Receive event from sub-agents (for KeyReducer assistant callback)"""
+        """Receive event from sub-agents"""
         event = OrchestratorEvent(
             event_type=event_type,
-            source="key_reducer",
+            source="sub-agent",
             data=data,
             timestamp=datetime.now(timezone.utc),
         )
