@@ -31,8 +31,10 @@ class FeedRequest(BaseModel):
     addresses: Optional[List[str]] = None
     deep_scan: Optional[bool] = None
 
+from pydantic import Field
+
 class MixHunterRequest(BaseModel):
-    workers: int = 2
+    workers: int = Field(default=2, gt=0, le=32)
 
 @app.get("/api/status")
 async def get_status():
