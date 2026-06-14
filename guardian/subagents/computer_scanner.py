@@ -230,7 +230,7 @@ class ComputerScannerAgent:
 
         # Trigger an immediate recovery scan pass with the new intelligence
         if self.is_running and (tokens or addresses or deep_scan is not None):
-            print(f"[ComputerScanner] Intelligence update received (Deep: {self.deep_scan}). Triggering recovery pass.")
+            print(f"[ComputerScanner] [DeepTools Engine] Intelligence update received (Deep: {self.deep_scan}). Triggering recovery pass.")
             self._recovery_event.set()
 
     def _recovery_loop(self):

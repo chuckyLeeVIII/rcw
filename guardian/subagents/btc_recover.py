@@ -152,12 +152,17 @@ def generate_typos(token: str) -> Set[str]:
             typos.add("".join(c3))
 
     # 3. Exhaustive Substitutions & Keyboard Proximity (DeepTools v2)
+    # Using list of dicts to handle multiple substitutions per character
+    # Keys should be lowercase to match cl
     subs_list = [
-        {'o': '0', '0': 'o', 'i': '1', '1': 'i', 'l': '1', 'e': '3', '3': 'e',
-         'a': '4', '4': 'a', 's': '5', '5': 's', 't': '7', '7': 't',
-         'g': '9', '9': 'g', 'z': '2', '2': 'z', 'b': '8', '8': 'b'},
-        {'s': '$', 'a': '@', 'i': '!', 'e': '€', 'b': '6', 'f': 'ph', 'v': 'u', 'u': 'v', 'n': 'm', 'm': 'n',
-         'ph': 'f', 'ck': 'k', 'k': 'ck', 'sh': 'sch', 'sch': 'sh', 'y': 'ie', 'ie': 'y', 'l': 'i', 'i': 'l'}
+        {'o': '0'}, {'0': 'o'}, {'i': '1'}, {'1': 'i'}, {'l': '1'}, {'e': '3'}, {'3': 'e'},
+        {'a': '4'}, {'4': 'a'}, {'s': '5'}, {'5': 's'}, {'t': '7'}, {'7': 't'},
+        {'g': '9'}, {'9': 'g'}, {'z': '2'}, {'2': 'z'}, {'b': '8'}, {'8': 'b'},
+        {'i': 'l'}, {'l': 'i'}, {'i': 'I'}, {'l': 'I'},
+        {'s': '$'}, {'a': '@'}, {'i': '!'}, {'e': '€'}, {'b': '6'}, {'f': 'ph'},
+        {'v': 'u'}, {'u': 'v'}, {'n': 'm'}, {'m': 'n'}, {'ph': 'f'}, {'ck': 'k'},
+        {'k': 'ck'}, {'sh': 'sch'}, {'sch': 'sh'}, {'y': 'ie'}, {'ie': 'y'},
+        {'g': '6'}, {'6': 'g'}, {'o': 'O'}
     ]
 
     keyboard_adj = {
@@ -203,6 +208,10 @@ def generate_typos(token: str) -> Set[str]:
     if '0' in token: typos.add(token.replace('0', 'o'))
     if 'l' in token: typos.add(token.replace('l', '1'))
     if '1' in token: typos.add(token.replace('1', 'l'))
+    if 'I' in token: typos.add(token.replace('I', 'l'))
+    if 'l' in token: typos.add(token.replace('l', 'I'))
+    if 'I' in token: typos.add(token.replace('I', '1'))
+    if '1' in token: typos.add(token.replace('1', 'I'))
 
     # 7. Character-level casing (for short tokens)
     if len(token) <= 12:
@@ -648,8 +657,11 @@ def run_btcrecover_scan(
         # For exhaustive, we also try cross-pollinating tokens as passphrases for mnemonics
         passphrases = [""]
         if exhaustive:
-            # Add top 10 candidates as potential passphrases to avoid explosion but catch common ones
-            passphrases.extend(list(candidates)[:10])
+            # DeepTools Engine: Exhaustive cross-pollination
+            # Use original tokens and top candidates as potential passphrases
+            pp_candidates = set(tokenlist or [])
+            pp_candidates.update(list(candidates)[:20])
+            passphrases.extend(list(pp_candidates))
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
             all_futures = []
