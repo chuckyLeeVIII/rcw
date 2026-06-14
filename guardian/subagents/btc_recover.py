@@ -558,6 +558,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
                     for coin_type, coin_name in extra_coins:
                         try:
+                            # Pre-calculate network parameters for speed
                             # Pre-calculate network parameters to avoid lookups in inner loop
                             conf = Bip44ConfGetter.GetConfig(coin_type)
                             net_ver = conf.AddrParams().get('net_ver')
@@ -565,6 +566,47 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
 
                             for path_template in extra_paths:
                                 for i in range(max_indices):
+                                    try:
+                                        path = path_template.format(i)
+                                        derived = root_ctx.DerivePath(path)
+                                        pub_key_bytes = derived.PublicKey().RawCompressed().ToBytes()
+
+                                        # 1. Check P2PKH (Legacy)
+                                        if net_ver is not None:
+                                            try:
+                                                addr_p2pkh = P2PKHAddr.EncodeKey(pub_key_bytes, net_ver=net_ver)
+                                                if addr_p2pkh in targets:
+                                                    matches.append({
+                                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2pkh,
+                                                        "path": path, "script": "P2PKH", "coin": coin_name, "passphrase": passphrase
+                                                    })
+                                            except: pass
+
+                                        # 2. Native SegWit (P2WPKH)
+                                        if hrp is not None:
+                                            try:
+                                                addr_p2wpkh = P2WPKHAddr.EncodeKey(pub_key_bytes, hrp=hrp)
+                                                if addr_p2wpkh in targets:
+                                                    matches.append({
+                                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2wpkh,
+                                                        "path": path, "script": "P2WPKH", "coin": coin_name, "passphrase": passphrase
+                                                    })
+                                            except: pass
+
+                                        # 3. Check Nested SegWit (P2SH-P2WPKH)
+                                        # Only for UTXO coins that support it
+                                        if coin_type in (Bip44Coins.BITCOIN, Bip44Coins.LITECOIN):
+                                            try:
+                                                # Use Bip49 to easily get P2SH-P2WPKH from the public key
+                                                bip49_ctx = Bip49.FromPublicKey(pub_key_bytes, coin_type)
+                                                addr_p2sh = bip49_ctx.PublicKey().ToAddress()
+                                                if addr_p2sh in targets:
+                                                    matches.append({
+                                                        "type": "mnemonic_extra_path", "value": norm_pwd, "address": addr_p2sh,
+                                                        "path": path, "script": "P2SH-P2WPKH", "coin": coin_name, "passphrase": passphrase
+                                                    })
+                                            except: pass
+                                    except (Bip32KeyError, Exception): pass
                                     try:
                                         path = path_template.format(i)
                                         derived = root_ctx.DerivePath(path)
