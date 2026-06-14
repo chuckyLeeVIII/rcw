@@ -523,6 +523,7 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
         except: pass
 
 
+        except Exception: pass
     # 2. As raw hex key (Brainwallet or Raw)
     potential_keys = []
     if len(pwd) == 64 and all(c in "0123456789abcdefABCDEF" for c in pwd):
