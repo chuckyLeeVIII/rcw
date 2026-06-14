@@ -422,7 +422,8 @@ def check_candidate(pwd: str, targets: Set[str], exhaustive: bool, passphrase: s
                                             except: pass
                                         # Nested SegWit
                                         try:
-                                            p2sh = Bip49.FromPublicKey(pub_bytes, coin_type).PublicKey().ToAddress()
+                                            bip49_coin = Bip49Coins[coin_type.name]
+                                            p2sh = Bip49.FromPublicKey(pub_bytes, bip49_coin).PublicKey().ToAddress()
                                             check_addrs.append((p2sh, "P2SH-P2WPKH"))
                                         except: pass
 
