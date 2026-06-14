@@ -109,14 +109,17 @@ class TestStartScanRichlist:
 
         The code splits comma-separated addresses and called add_to_richlist with a list of valid ones.
         """
+    def test_richlist_comma_separated_treated_as_list(self, client_with_scanner):
+        """Verify comma-separated addresses are treated as a list of addresses"""
         client, orchestrator, scanner = client_with_scanner
-        # Two valid addresses joined by comma; combined length is > 26
+        # Two valid addresses joined by comma
         addr1 = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH"
         addr2 = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
         combined = f"{addr1},{addr2}"
         response = client.post("/api/scan/start", json={"paths": ["/tmp"], "richlist": combined})
         assert response.status_code == 200
         # The code splits; both addresses are passed in a list
+        # The code should split and pass as list
         scanner.add_to_richlist.assert_called_once_with([addr1, addr2])
 
     def test_scan_start_returns_started_status(self, client_with_scanner):
